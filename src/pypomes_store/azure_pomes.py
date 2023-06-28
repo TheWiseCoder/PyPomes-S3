@@ -1,9 +1,10 @@
+import io
+import sys
 # noinspection PyPackageRequirements
 from azure.storage.blob import BlobClient, BlobProperties
 from typing import Final
-import io
-import sys
-from .env_pomes import APP_PREFIX, env_get_str
+from pypomes_core.env_pomes import APP_PREFIX, env_get_str
+from pypomes_core.exception_pomes import exc_format
 
 # string de conexão com o Azure
 AZURE_CONNECTION_STRING: Final[str] = env_get_str(f"{APP_PREFIX}_AZURE_CONNECTION_STRING")
@@ -166,7 +167,6 @@ def __azure_except_msg(exception: Exception) -> str:
     :return: A mensagem de erro formatada
     """
     # TODO
-    from .exception_pomes import exc_format
     return exc_format(exception, sys.exc_info())
 
 

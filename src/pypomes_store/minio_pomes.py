@@ -1,13 +1,13 @@
 from typing import Final, Iterator
-from minio import Minio
-from minio.datatypes import Object as MinioObject
-from minio.commonconfig import Tags
-from unidecode import unidecode
 import os
 import pickle
 import tempfile
 import uuid
-from .env_pomes import APP_PREFIX, env_get_bool, env_get_str
+from minio import Minio
+from minio.datatypes import Object as MinioObject
+from minio.commonconfig import Tags
+from pypomes_core.env_pomes import APP_PREFIX, env_get_bool, env_get_str
+from unidecode import unidecode
 
 MINIO_BUCKET: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_BUCKET")
 MINIO_HOST: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_HOST")
