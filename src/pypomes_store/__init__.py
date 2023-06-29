@@ -20,5 +20,5 @@ __all__ = [
     minio_object_tags_retrieve, minio_file_retrieve, minio_setup
 ]
 
-__version__ = "0.1.3"
-__version_info__ = (0, 1, 3)
+__version__ = "0.1.4"
+__version_info__ = (0, 1, 4)
