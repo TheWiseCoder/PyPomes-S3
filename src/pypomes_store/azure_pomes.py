@@ -3,8 +3,7 @@ import sys
 # noinspection PyPackageRequirements
 from azure.storage.blob import BlobClient, BlobProperties
 from typing import Final
-from pypomes_core.env_pomes import APP_PREFIX, env_get_str
-from pypomes_core.exception_pomes import exc_format
+from pypomes_core import APP_PREFIX, env_get_str, exc_format
 
 # string de conexão com o Azure
 AZURE_CONNECTION_STRING: Final[str] = env_get_str(f"{APP_PREFIX}_AZURE_CONNECTION_STRING")
@@ -134,6 +133,7 @@ def blob_get_mimetype(errors: list[str], blob_path: str,
                       bucket_name: str = AZURE_STORAGE_BUCKET) -> str:
     """
     Obtem e retorna o texxto contido no documento apontado por *file_path*, dentro de  *bucket_name*.
+
     Esse documento deve ser do tipo HTML ou PDF.
 
     :param errors: eventuais erros ocorridos na invocação da função
@@ -141,7 +141,6 @@ def blob_get_mimetype(errors: list[str], blob_path: str,
     :param bucket_name: o nome do bucket (AZURE_STORAGE_BUCKET, se não especificado)
     :return: o texto do blob, codificado em UTF-8
     """
-
     # inicializa a variável de retorno
     result: str | None = None
 

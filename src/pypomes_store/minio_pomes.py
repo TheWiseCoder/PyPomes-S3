@@ -1,12 +1,13 @@
-from typing import Final, Iterator
 import os
 import pickle
 import tempfile
 import uuid
+from collections.abc import Iterator
 from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
-from pypomes_core.env_pomes import APP_PREFIX, env_get_bool, env_get_str
+from pypomes_core import APP_PREFIX, env_get_bool, env_get_str
+from typing import Final
 from unidecode import unidecode
 
 MINIO_BUCKET: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_BUCKET")
@@ -18,16 +19,26 @@ MINIO_TEMP_PATH: Final[str] = env_get_str(F"{APP_PREFIX}_MINIO_TEMP_PATH", tempf
 
 
 def minio_setup(errors: list[str]) -> bool:
+    """
+    Prepare the *MinIO* client for operations.
 
+    This function should be called just once, at startup,
+    to make sure the interaction with the MinIo service is fully functional.
+
+    :param errors: incidental error messages
+    :return: True if service is fully functional
+    """
+    # initialize the return variable
     result: bool = True
+
     try:
-        # obtem o cliente MinIO
+        # retrieve the MinIO client
         minio_client = Minio(endpoint=MINIO_HOST,
                              access_key=MINIO_ACCESS_KEY,
                              secret_key=MINIO_SECRET_KEY,
                              secure=MINIO_SECURE_ACCESS)
 
-        # constrói o bucket, se necessário
+        # build the bucket, if needed
         if not minio_client.bucket_exists(bucket_name=MINIO_BUCKET):
             minio_client.make_bucket(bucket_name=MINIO_BUCKET)
 
@@ -38,13 +49,17 @@ def minio_setup(errors: list[str]) -> bool:
     return result
 
 
-# obtem o cliente MinIO
 def minio_access(errors: list[str]) -> Minio:
+    """
+    Obtain and return the *MinIO* client object.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :return: the MinIO client object
+    """
+    # initialize the return variable
     result: Minio | None = None
 
-    # obtem o cliente MinIO
+    # retrieve the MinIO client
     try:
         result = Minio(endpoint=MINIO_HOST,
                        access_key=MINIO_ACCESS_KEY,
@@ -57,26 +72,34 @@ def minio_access(errors: list[str]) -> Minio:
     return result
 
 
-# armazena arquivo no MinIO
 def minio_file_store(errors: list[str], basepath: str,
-                     identificador: str, filepath: str, mimetype: str, tags: dict = None):
+                     identifier: str, filepath: str, mimetype: str, tags: dict = None):
+    """
+    Store a file at the *MinIO* store.
 
-    # obtem o cliente MinIO
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to store the file at
+    :param identifier: the file identifier, tipically a file name
+    :param filepath: the path specifying where the file is
+    :param mimetype: the file mimetype
+    :param tags: optional metadata describing the file
+    """
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # was the MinIO client obtained ?
     if minio_client is not None:
-        # sim, armazene o arquivo
-        remotepath: str = os.path.join(basepath, identificador)
-        # tags foram definidas ?
+        # yes, store the file
+        remotepath: str = os.path.join(basepath, identifier)
+        # have tags been defined ?
         if tags is None or len(tags) == 0:
-            # não
+            # no
             doc_tags = None
         else:
-            # sim, armazene-as
+            # sim, store them
             doc_tags = Tags(for_object=True)
             for key, value in tags.items():
-                # normaliza texto, retirando diacríticos
+                # normalize text, by removing all diacritics
                 doc_tags[key] = unidecode(value)
         try:
             minio_client.fput_object(bucket_name=MINIO_BUCKET,
@@ -88,19 +111,26 @@ def minio_file_store(errors: list[str], basepath: str,
             errors.append(__minio_except_msg(e))
 
 
-# recupera o arquivo
-def minio_file_retrieve(errors: list[str], basepath: str, identificador: str, filepath: str) -> any:
+def minio_file_retrieve(errors: list[str], basepath: str, identifier: str, filepath: str) -> any:
+    """
+    Retrieve a file from the *MinIO* store.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to retrieve the file from
+    :param identifier: the file identifier, tipically a file name
+    :param filepath: the path to save the retrieved file at
+    :return: information about the file retrieved
+    """
+    # initialize the return variable
     result: any = None
 
-    # obtem o cliente MinIO
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # was the MinIO client obtained ?
     if minio_client is not None:
-        # sim, obtenha o arquivo
-        remotepath: str = os.path.join(basepath, identificador)
+        # yes, retrieve the file
+        remotepath: str = os.path.join(basepath, identifier)
         try:
             result = minio_client.fget_object(bucket_name=MINIO_BUCKET,
                                               object_name=remotepath,
@@ -112,40 +142,52 @@ def minio_file_retrieve(errors: list[str], basepath: str, identificador: str, fi
     return result
 
 
-# determina se objeto existe no MinIO
-def minio_object_exists(errors: list[str], basepath: str, identificador: str = None) -> bool:
+def minio_object_exists(errors: list[str], basepath: str, identifier: str = None) -> bool:
+    """
+    Determine if a given object exists in the *MinIO* store.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to locate the object at
+    :param identifier: the object identifier
+    :return: True if the object was found
+    """
+    # initialize the return variable
     result: bool = False
 
-    # o identificador foi informado ?
-    if identificador is None:
-        # não, objeto é uma pasta
+    # was the identifier provided ?
+    if identifier is None:
+        # no, object is a folder
         objs: Iterator = minio_objects_list(errors, basepath)
         for _ in objs:
             result = True
             break
     else:
-        # sim, verifique o 'stat' do objeto
-        if minio_object_stat(errors, basepath, identificador) is not None:
+        # yes, verify the status of the object
+        if minio_object_stat(errors, basepath, identifier) is not None:
             result = True
 
     return result
 
 
-# retorna o status do objeto - None se objeto não existe
-def minio_object_stat(errors: list[str], basepath: str, identificador: str) -> MinioObject:
+def minio_object_stat(errors: list[str], basepath: str, identifier: str) -> MinioObject:
+    """
+    Retrieve and return the information about an object in the *MinIO* store.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying where to locate the object
+    :param identifier: the object identifier
+    :return: metadata and information about the object
+    """
+    # initialize the return variable
     result: MinioObject | None = None
 
-    # obtem o cliente MinIO
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # was the MinIO client obtained ?
     if minio_client is not None:
-        # sim, obtenha o status do objeto
-        remotepath: str = os.path.join(basepath, identificador)
+        # yes, retrieve the object's information
+        remotepath: str = os.path.join(basepath, identifier)
         try:
             result = minio_client.stat_object(bucket_name=MINIO_BUCKET,
                                               object_name=remotepath)
@@ -156,39 +198,52 @@ def minio_object_stat(errors: list[str], basepath: str, identificador: str) -> M
     return result
 
 
-# armazena objeto no MinIO
 def minio_object_store(errors: list[str], basepath: str,
-                       identificador: str, objeto: any, tags: dict = None):
+                       identifier: str, obj: any, tags: dict = None):
+    """
+    Store an object at the *MinIO* store.
 
-    # obtem o cliente MinIO
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to store the object at
+    :param identifier: the object identifier
+    :param obj: object to be stored
+    :param tags: optional metadata describing the object
+    """
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # se foi possível obter o cliente MinIO, prossiga
+    # proceed, if the MinIO client was obtained
     if minio_client is not None:
 
-        # serializa o objeto em arquivo
+        # serialize the object into a file
         filepath: str = os.path.join(MINIO_TEMP_PATH, str(uuid.uuid4()) + ".pickle")
         with open(filepath, "wb") as f:
-            pickle.dump(objeto, f)
+            pickle.dump(obj, f)
 
-        # armazena e remove o arquivo
-        minio_file_store(errors, basepath, identificador, filepath, "application/octet-stream", tags)
+        # store the file and remove it
+        minio_file_store(errors, basepath, identifier, filepath, "application/octet-stream", tags)
         os.remove(filepath)
 
 
-# recupera o objeto
-def minio_object_retrieve(errors: list[str], basepath: str, identificador: str) -> any:
+def minio_object_retrieve(errors: list[str], basepath: str, identifier: str) -> any:
+    """
+    Retrieve an object from the *MinIO* store.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to retrieve the object from
+    :param identifier: the object identifier
+    :return: the object retrieved
+    """
+    # initialize the return variable
     result: any = None
 
-    # recupera o arquivo contendo o objeto serializado
+    # retrieve the file containg the serialized object
     filepath: str = os.path.join(MINIO_TEMP_PATH, str(uuid.uuid4()) + ".pickle")
-    stat: any = minio_file_retrieve(errors, basepath, identificador, filepath)
+    stat: any = minio_file_retrieve(errors, basepath, identifier, filepath)
 
-    # o arquivo foi recuperado ?
+    # was the file retrieved ?
     if stat is not None:
-        # sim, reconstrua o objeto e destrua o arquivo
+        # yes, umarshall the corresponding object
         with open(filepath, "rb") as f:
             result = pickle.load(f)
         os.remove(filepath)
@@ -196,20 +251,26 @@ def minio_object_retrieve(errors: list[str], basepath: str, identificador: str) 
     return result
 
 
-def minio_object_delete(errors: list[str], basepath: str, identificador: str = None):
+def minio_object_delete(errors: list[str], basepath: str, identifier: str = None):
+    """
+    Remove an object from the *MinIO* store.
 
-    # obtem o cliente MinIO
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to retrieve the object from
+    :param identifier: the object identifier
+    """
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # proceed, if the MinIO client was obtained
     if minio_client is not None:
-        # sim, o identificador do objeto foi definido ?
-        if identificador is None:
-            # não, exclua a pasta
+        # was the identifier provided ?
+        if identifier is None:
+            # no, remove the folder
             __minio_folder_delete(errors, minio_client, basepath)
         else:
-            # sim, exclua o objeto
-            remotepath: str = os.path.join(basepath, identificador)
+            # yes, remove the object
+            remotepath: str = os.path.join(basepath, identifier)
             try:
                 minio_client.remove_object(bucket_name=MINIO_BUCKET,
                                            object_name=remotepath)
@@ -219,18 +280,25 @@ def minio_object_delete(errors: list[str], basepath: str, identificador: str = N
 
 
 # recupera as tags do objeto
-def minio_object_tags_retrieve(errors: list[str], basepath: str, identificador: str) -> dict:
+def minio_object_tags_retrieve(errors: list[str], basepath: str, identifier: str) -> dict:
+    """
+    Retrieve and return the metadata information for an object in the *MinIO* store.
 
-    # declara a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to retrieve the object from
+    :param identifier: the object identifier
+    :return: the metadata about the object
+    """
+    # initialize the return variable
     result: dict | None = None
 
-    # obtem o cliente MinIO
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # was the MinIO client obtained ?
     if minio_client is not None:
-        # sim, prossiga
-        remotepath: str = os.path.join(basepath, identificador)
+        # yes, proceed
+        remotepath: str = os.path.join(basepath, identifier)
         try:
             tags: Tags = minio_client.get_object_tags(bucket_name=MINIO_BUCKET,
                                                       object_name=remotepath)
@@ -247,16 +315,23 @@ def minio_object_tags_retrieve(errors: list[str], basepath: str, identificador: 
 
 # retorna a lista de objetos na pasta identificada pelo argumento - None se pasta não existe
 def minio_objects_list(errors: list[str], basepath: str, recursive: bool = False) -> Iterator:
+    """
+    Retrieve and return an iterator into the list of objects at *basepath*, in the *MinIO* store.
 
-    # inicializa a variável de retorno
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to iterate from
+    :param recursive: whether the location is iterated recursively
+    :return: the iterator into the list of objects
+    """
+    # initialize the return variable
     result: any = None
 
-    # obtem o cliente MinIO
+    # obtain the MinIO client
     minio_client: Minio = minio_access(errors)
 
-    # foi possível obter o cliente MinIO ?
+    # was the MinIO client obtained ?
     if minio_client is not None:
-        # sim, obtenha a lista de objetos
+        # yes, retrieve the iterator into the list of objects
         try:
             result = minio_client.list_objects(bucket_name=MINIO_BUCKET,
                                                prefix=basepath,
@@ -268,8 +343,14 @@ def minio_objects_list(errors: list[str], basepath: str, recursive: bool = False
 
 
 def __minio_folder_delete(errors: list[str],  minio_client: Minio, basepath: str):
+    """
+    Traverse the folders recursively, removing its objects.
 
-    # percorra a pasta recursivamente, removendo seus objetos
+    :param errors: incidental error messages
+    :param minio_client: the MinIO client object
+    :param basepath: the path specifying the location to delete the objects at.
+    """
+    #
     try:
         objs: Iterator = minio_objects_list(errors, basepath, True)
         for obj in objs:
@@ -277,17 +358,21 @@ def __minio_folder_delete(errors: list[str],  minio_client: Minio, basepath: str
                 minio_client.remove_object(bucket_name=MINIO_BUCKET,
                                            object_name=obj.object_name)
             except Exception as e:
-                # SANITY CHECK: em caso de exclusão concorrente
+                # SANITY CHECK: in case of concurrent exclusion
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
                     errors.append(__minio_except_msg(e))
     except Exception as e:
         errors.append(__minio_except_msg(e))
 
 
-# constrói a mensagem de erro a partir da exceção produzida
 def __minio_except_msg(exception: Exception) -> str:
+    """
+    Format and return an error message from *exception*.
 
-    # interação com o MinIO levantou a exceção "<class 'classe-da-exceção'>"
+    :param exception: the reference exception
+    :return: the error message
+    """
+    # interaction with MinIO raised the exception "<class 'classe-da-exceção'>"
     cls: str = str(exception.__class__)
     exc_msg: str = f"{cls[7:-1]} - {exception}"
     return f"Error accessing the object storer: {exc_msg}"
