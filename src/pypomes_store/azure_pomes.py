@@ -169,43 +169,44 @@ def __azure_except_msg(exception: Exception) -> str:
     return exc_format(exception, sys.exc_info())
 
 
-# testes do acesso ao Azure
-# if __name__ == "__main__":
-#
-#     # print errors
-#     def __print_errors(errors: list[str], op):
-#         if len(errors) > 0:
-#             print(f"\nErrors in '{op}':")
-#             for error in errors:
-#                 print(error)
-#
-#     errors: list[str] = []
-#     content: bytes = b"This is the content of a sample text file."
-#     file_path: str = "/temp/sample.txt"
-#
-#     # testa a verificação de existência do arquivo
-#     exists: bool = blob_exists(errors, file_path)
-#     __print_errors(errors, "blob_exists")
-#     assert exists is not None, "Failed verifying file"
-#
-#     # testa armazenamento de arquivo
-#     if not exists:
-#         success = blob_store(errors, content, file_path)
-#         __print_errors(errors, "blob_store")
-#         assert success, "Failed storing file"
-#
-#     # testa recuperação do tipo do arquivo
-#     mimetype: str = blob_get_mimetype(errors, file_path)
-#     __print_errors(errors, "blob_get_mimetype")
-#     assert mimetype is not None, "Failed retrieving file mimetype"
-#
-#     # testa recuperação do conteúdo do arquivo
-#     retrieved: bytes = blob_retrieve(errors, file_path)
-#     __print_errors(errors, "blob_retrieve")
-#     assert retrieved is not None, "Failed retrieving file content"
-#     print(f"Conteudo recuperado: {content}")
-#
-#     # testa a exclusão do arquivo
-#     success = blob_delete(errors, file_path)
-#     __print_errors(errors, "blob_delete")
-#     assert success, "Failed Deleting file"
+# test Azure operations
+if __name__ == "__main__":
+
+    # ruff: noqa: S101
+
+    def __print_errors(errors: list[str], op: str) -> None:
+        if len(errors) > 0:
+            print(f"\nErrors in '{op}':")
+            for error in errors:
+                print(error)
+
+    errors: list[str] = []
+    content: bytes = b"This is the content of a sample text file."
+    file_path: str = "/temp/sample.txt"
+
+    # verify if file exists
+    exists: bool = blob_exists(errors, file_path)
+    __print_errors(errors, "blob_exists")
+    assert exists is not None, "Failed verifying file"
+
+    # store file
+    if not exists:
+        success = blob_store(errors, content, file_path)
+        __print_errors(errors, "blob_store")
+        assert success, "Failed storing file"
+
+    # retrieve file type
+    mimetype: str = blob_get_mimetype(errors, file_path)
+    __print_errors(errors, "blob_get_mimetype")
+    assert mimetype is not None, "Failed retrieving file mimetype"
+
+    # retrieve file contents
+    retrieved: bytes = blob_retrieve(errors, file_path)
+    __print_errors(errors, "blob_retrieve")
+    assert retrieved is not None, "Failed retrieving file content"
+    print(f"Conteudo recuperado: {content}")
+
+    # remove the file
+    success = blob_delete(errors, file_path)
+    __print_errors(errors, "blob_delete")
+    assert success, "Failed Deleting file"

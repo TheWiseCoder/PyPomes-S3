@@ -6,7 +6,8 @@ from collections.abc import Iterator
 from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
-from pypomes_core import APP_PREFIX, env_get_bool, env_get_str
+from pathlib import Path
+from pypomes_core import APP_PREFIX, env_get_bool, env_get_str, env_get_path
 from typing import Final
 from unidecode import unidecode
 
@@ -15,7 +16,7 @@ MINIO_HOST: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_HOST")
 MINIO_ACCESS_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_SECRET_KEY")
 MINIO_SECURE_ACCESS: Final[bool] = env_get_bool(F"{APP_PREFIX}_MINIO_SECURE_ACCESS")
-MINIO_TEMP_PATH: Final[str] = env_get_str(F"{APP_PREFIX}_MINIO_TEMP_PATH", tempfile.gettempdir())
+MINIO_TEMP_PATH: Final[Path] = env_get_path(f"{APP_PREFIX}_MINIO_TEMP_PATH", Path(tempfile.gettempdir()))
 
 
 def minio_setup(errors: list[str]) -> bool:
@@ -72,8 +73,8 @@ def minio_access(errors: list[str]) -> Minio:
     return result
 
 
-def minio_file_store(errors: list[str], basepath: str,
-                     identifier: str, filepath: str, mimetype: str, tags: dict = None):
+def minio_file_store(errors: list[str], basepath: Path | str,
+                     identifier: str, filepath: Path | str, mimetype: str, tags: dict = None) -> None:
     """
     Store a file at the *MinIO* store.
 
@@ -90,7 +91,7 @@ def minio_file_store(errors: list[str], basepath: str,
     # was the MinIO client obtained ?
     if minio_client is not None:
         # yes, store the file
-        remotepath: str = os.path.join(basepath, identifier)
+        remotepath: Path = Path(basepath) / identifier
         # have tags been defined ?
         if tags is None or len(tags) == 0:
             # no
@@ -103,7 +104,7 @@ def minio_file_store(errors: list[str], basepath: str,
                 doc_tags[key] = unidecode(value)
         try:
             minio_client.fput_object(bucket_name=MINIO_BUCKET,
-                                     object_name=remotepath,
+                                     object_name=f"{remotepath}",
                                      file_path=filepath,
                                      content_type=mimetype,
                                      tags=doc_tags)
@@ -111,7 +112,8 @@ def minio_file_store(errors: list[str], basepath: str,
             errors.append(__minio_except_msg(e))
 
 
-def minio_file_retrieve(errors: list[str], basepath: str, identifier: str, filepath: str) -> any:
+def minio_file_retrieve(errors: list[str], basepath: Path | str,
+                        identifier: str, filepath: Path | str) -> any:
     """
     Retrieve a file from the *MinIO* store.
 
@@ -130,10 +132,10 @@ def minio_file_retrieve(errors: list[str], basepath: str, identifier: str, filep
     # was the MinIO client obtained ?
     if minio_client is not None:
         # yes, retrieve the file
-        remotepath: str = os.path.join(basepath, identifier)
+        remotepath: Path = Path(basepath) / identifier
         try:
             result = minio_client.fget_object(bucket_name=MINIO_BUCKET,
-                                              object_name=remotepath,
+                                              object_name=f"{remotepath}",
                                               file_path=filepath)
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
@@ -142,7 +144,7 @@ def minio_file_retrieve(errors: list[str], basepath: str, identifier: str, filep
     return result
 
 
-def minio_object_exists(errors: list[str], basepath: str, identifier: str = None) -> bool:
+def minio_object_exists(errors: list[str], basepath: Path | str, identifier: str = None) -> bool:
     """
     Determine if a given object exists in the *MinIO* store.
 
@@ -161,15 +163,14 @@ def minio_object_exists(errors: list[str], basepath: str, identifier: str = None
         for _ in objs:
             result = True
             break
-    else:
-        # yes, verify the status of the object
-        if minio_object_stat(errors, basepath, identifier) is not None:
-            result = True
+    # verify the status of the object
+    elif minio_object_stat(errors, basepath, identifier) is not None:
+        result = True
 
     return result
 
 
-def minio_object_stat(errors: list[str], basepath: str, identifier: str) -> MinioObject:
+def minio_object_stat(errors: list[str], basepath: Path | str, identifier: str) -> MinioObject:
     """
     Retrieve and return the information about an object in the *MinIO* store.
 
@@ -187,10 +188,10 @@ def minio_object_stat(errors: list[str], basepath: str, identifier: str) -> Mini
     # was the MinIO client obtained ?
     if minio_client is not None:
         # yes, retrieve the object's information
-        remotepath: str = os.path.join(basepath, identifier)
+        remotepath: Path = Path(basepath) / identifier
         try:
             result = minio_client.stat_object(bucket_name=MINIO_BUCKET,
-                                              object_name=remotepath)
+                                              object_name=f"{remotepath}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(__minio_except_msg(e))
@@ -198,8 +199,8 @@ def minio_object_stat(errors: list[str], basepath: str, identifier: str) -> Mini
     return result
 
 
-def minio_object_store(errors: list[str], basepath: str,
-                       identifier: str, obj: any, tags: dict = None):
+def minio_object_store(errors: list[str], basepath: Path | str,
+                       identifier: str, obj: any, tags: dict = None) -> None:
     """
     Store an object at the *MinIO* store.
 
@@ -216,16 +217,16 @@ def minio_object_store(errors: list[str], basepath: str,
     if minio_client is not None:
 
         # serialize the object into a file
-        filepath: str = os.path.join(MINIO_TEMP_PATH, str(uuid.uuid4()) + ".pickle")
-        with open(filepath, "wb") as f:
+        filepath: Path = Path(MINIO_TEMP_PATH) / f"{uuid.uuid4()}.pickle"
+        with Path.open(filepath, "wb") as f:
             pickle.dump(obj, f)
 
         # store the file and remove it
         minio_file_store(errors, basepath, identifier, filepath, "application/octet-stream", tags)
-        os.remove(filepath)
+        Path.unlink(filepath)
 
 
-def minio_object_retrieve(errors: list[str], basepath: str, identifier: str) -> any:
+def minio_object_retrieve(errors: list[str], basepath: Path, identifier: str) -> any:
     """
     Retrieve an object from the *MinIO* store.
 
@@ -238,20 +239,20 @@ def minio_object_retrieve(errors: list[str], basepath: str, identifier: str) -> 
     result: any = None
 
     # retrieve the file containg the serialized object
-    filepath: str = os.path.join(MINIO_TEMP_PATH, str(uuid.uuid4()) + ".pickle")
+    filepath: Path = Path(MINIO_TEMP_PATH) / f"{uuid.uuid4()}.pickle"
     stat: any = minio_file_retrieve(errors, basepath, identifier, filepath)
 
     # was the file retrieved ?
     if stat is not None:
         # yes, umarshall the corresponding object
-        with open(filepath, "rb") as f:
+        with Path.open(filepath, "rb") as f:
             result = pickle.load(f)
-        os.remove(filepath)
+        Path.unlink(filepath)
 
     return result
 
 
-def minio_object_delete(errors: list[str], basepath: str, identifier: str = None):
+def minio_object_delete(errors: list[str], basepath: str, identifier: str = None) -> None:
     """
     Remove an object from the *MinIO* store.
 
@@ -342,7 +343,7 @@ def minio_objects_list(errors: list[str], basepath: str, recursive: bool = False
     return result
 
 
-def __minio_folder_delete(errors: list[str],  minio_client: Minio, basepath: str):
+def __minio_folder_delete(errors: list[str],  minio_client: Minio, basepath: str) -> None:
     """
     Traverse the folders recursively, removing its objects.
 
@@ -357,7 +358,7 @@ def __minio_folder_delete(errors: list[str],  minio_client: Minio, basepath: str
             try:
                 minio_client.remove_object(bucket_name=MINIO_BUCKET,
                                            object_name=obj.object_name)
-            except Exception as e:
+            except Exception as e:  # noqa: PERF203
                 # SANITY CHECK: in case of concurrent exclusion
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
                     errors.append(__minio_except_msg(e))
@@ -372,7 +373,7 @@ def __minio_except_msg(exception: Exception) -> str:
     :param exception: the reference exception
     :return: the error message
     """
-    # interaction with MinIO raised the exception "<class 'classe-da-exceção'>"
+    # interaction with MinIO raised the exception "<class 'exception_class'>"
     cls: str = str(exception.__class__)
     exc_msg: str = f"{cls[7:-1]} - {exception}"
     return f"Error accessing the object storer: {exc_msg}"

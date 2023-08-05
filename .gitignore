@@ -7,5 +7,4 @@ tmp
 /env
 .vscode
 *.py[cod]
-.ruff.toml
 deploy.txt
