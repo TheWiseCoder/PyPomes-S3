@@ -1,13 +1,12 @@
 import os
 import pickle
-import tempfile
 import uuid
 from collections.abc import Iterator
 from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
-from pypomes_core import APP_PREFIX, env_get_bool, env_get_str, env_get_path
+from pypomes_core import APP_PREFIX, TEMP_DIR, env_get_bool, env_get_str, env_get_path
 from typing import Final
 from unidecode import unidecode
 
@@ -16,7 +15,7 @@ MINIO_HOST: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_HOST")
 MINIO_ACCESS_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_MINIO_SECRET_KEY")
 MINIO_SECURE_ACCESS: Final[bool] = env_get_bool(F"{APP_PREFIX}_MINIO_SECURE_ACCESS")
-MINIO_TEMP_PATH: Final[Path] = env_get_path(f"{APP_PREFIX}_MINIO_TEMP_PATH", Path(tempfile.gettempdir()))
+MINIO_TEMP_PATH: Final[Path] = env_get_path(f"{APP_PREFIX}_MINIO_TEMP_PATH", TEMP_DIR)
 
 
 def minio_setup(errors: list[str]) -> bool:
@@ -89,7 +88,7 @@ def minio_file_store(errors: list[str], basepath: Path | str,
     minio_client: Minio = minio_access(errors)
 
     # was the MinIO client obtained ?
-    if minio_client is not None:
+    if minio_client:
         # yes, store the file
         remotepath: Path = Path(basepath) / identifier
         # have tags been defined ?
@@ -130,7 +129,7 @@ def minio_file_retrieve(errors: list[str], basepath: Path | str,
     minio_client: Minio = minio_access(errors)
 
     # was the MinIO client obtained ?
-    if minio_client is not None:
+    if minio_client:
         # yes, retrieve the file
         remotepath: Path = Path(basepath) / identifier
         try:
@@ -164,7 +163,7 @@ def minio_object_exists(errors: list[str], basepath: Path | str, identifier: str
             result = True
             break
     # verify the status of the object
-    elif minio_object_stat(errors, basepath, identifier) is not None:
+    elif minio_object_stat(errors, basepath, identifier):
         result = True
 
     return result
@@ -186,7 +185,7 @@ def minio_object_stat(errors: list[str], basepath: Path | str, identifier: str) 
     minio_client: Minio = minio_access(errors)
 
     # was the MinIO client obtained ?
-    if minio_client is not None:
+    if minio_client:
         # yes, retrieve the object's information
         remotepath: Path = Path(basepath) / identifier
         try:
@@ -214,7 +213,7 @@ def minio_object_store(errors: list[str], basepath: Path | str,
     minio_client: Minio = minio_access(errors)
 
     # proceed, if the MinIO client was obtained
-    if minio_client is not None:
+    if minio_client:
 
         # serialize the object into a file
         filepath: Path = Path(MINIO_TEMP_PATH) / f"{uuid.uuid4()}.pickle"
@@ -243,7 +242,7 @@ def minio_object_retrieve(errors: list[str], basepath: Path, identifier: str) ->
     stat: any = minio_file_retrieve(errors, basepath, identifier, filepath)
 
     # was the file retrieved ?
-    if stat is not None:
+    if stat:
         # yes, umarshall the corresponding object
         with Path.open(filepath, "rb") as f:
             result = pickle.load(f)
@@ -264,7 +263,7 @@ def minio_object_delete(errors: list[str], basepath: str, identifier: str = None
     minio_client: Minio = minio_access(errors)
 
     # proceed, if the MinIO client was obtained
-    if minio_client is not None:
+    if minio_client:
         # was the identifier provided ?
         if identifier is None:
             # no, remove the folder
@@ -297,7 +296,7 @@ def minio_object_tags_retrieve(errors: list[str], basepath: str, identifier: str
     minio_client: Minio = minio_access(errors)
 
     # was the MinIO client obtained ?
-    if minio_client is not None:
+    if minio_client:
         # yes, proceed
         remotepath: str = os.path.join(basepath, identifier)
         try:
@@ -331,7 +330,7 @@ def minio_objects_list(errors: list[str], basepath: str, recursive: bool = False
     minio_client: Minio = minio_access(errors)
 
     # was the MinIO client obtained ?
-    if minio_client is not None:
+    if minio_client:
         # yes, retrieve the iterator into the list of objects
         try:
             result = minio_client.list_objects(bucket_name=MINIO_BUCKET,
