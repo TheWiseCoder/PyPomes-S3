@@ -10,7 +10,7 @@ version = "0.2.7"
 authors = [
   { name="GT Nunes", email="wisecoder01@gmail.com" }
 ]
-description = "A collection of Python pomes, pennyeach (object storage modules)"
+description = "A collection of Python pomes, pennyeach (S3 storage modules)"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -29,5 +29,5 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/TheWiseCoder/PyPomes-Store"
-"Bug Tracker" = "https://github.com/TheWiseCoder/PyPomes-Store/issues"
+"Homepage" = "https://github.com/TheWiseCoder/PyPomes-S3"
+"Bug Tracker" = "https://github.com/TheWiseCoder/PyPomes-S3/issues"

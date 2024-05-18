@@ -80,7 +80,7 @@ def minio_setup(errors: list[str],
                 curr_client.make_bucket(bucket_name=bucket)
             result = True
             if logger:
-                logger.debug(f"Setup MinIO, endpoint={MINIO_ENDPOINT}, bucket={bucket}, "
+                logger.debug(f"Setup MinIO, endpoint={MINIO_ENDPOINT_URL}, bucket={bucket}, "
                              f"access key={MINIO_ACCESS_KEY}, secure={MINIO_SECURE_ACCESS}")
         except Exception as e:
             __minio_except_msg(errors=errors,

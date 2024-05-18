@@ -12,9 +12,9 @@ from typing import Final
 # from unidecode import unidecode
 
 S3_BUCKET_NAME: Final[str] = env_get_str(f"{APP_PREFIX}_S3_BUCKET_NAME")
-S3_ENDPOINT_URL: Final[str] = env_get_str(f"{APP_PREFIX}_S3_ENDPOINT_URL")
 S3_ACCESS_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_S3_ACCESS_KEY")
 S3_SECRET_KEY: Final[str] = env_get_str(f"{APP_PREFIX}_S3_SECRET_KEY")
+S3_ENDPOINT_URL: Final[str] = env_get_str(f"{APP_PREFIX}_S3_ENDPOINT_URL")
 S3_TEMP_PATH: Final[Path] = env_get_path(f"{APP_PREFIX}_S3_TEMP_PATH", TEMP_DIR)
 
 
