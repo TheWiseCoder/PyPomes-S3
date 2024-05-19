@@ -1,22 +1,14 @@
-from .minio_client import (
-    MinioCM
-)
-from .minio_pomes import (
-    MINIO_BUCKET_NAME, MINIO_ENDPOINT_URL, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_SECURE_ACCESS, MINIO_TEMP_PATH,
-    minio_access, minio_file_store, minio_object_store, minio_object_stat,
-    minio_object_delete, minio_objects_list, minio_object_retrieve, minio_object_exists,
-    minio_object_tags_retrieve, minio_file_retrieve, minio_setup,
+from .s3_pomes import (
+    s3_access, s3_startup, s3_file_store, s3_object_store, s3_object_stat,
+    s3_object_delete, s3_objects_list, s3_object_retrieve, s3_object_exists,
+    s3_object_tags_retrieve, s3_file_retrieve,
 )
 
 __all__ = [
-    # minio_client
-    "MinioCM",
-    # minio_pomes
-    "MINIO_BUCKET_NAME", "MINIO_ENDPOINT_URL", "MINIO_ACCESS_KEY",
-    "MINIO_SECRET_KEY", "MINIO_SECURE_ACCESS", "MINIO_TEMP_PATH",
-    "minio_access", "minio_file_store", "minio_object_store", "minio_object_stat",
-    "minio_object_delete", "minio_objects_list", "minio_object_retrieve", "minio_object_exists",
-    "minio_object_tags_retrieve", "minio_file_retrieve", "minio_setup",
+    # s3_pomes
+    "s3_access", "s3_startup", "s3_file_store", "s3_object_store", "s3_object_stat",
+    "s3_object_delete", "s3_objects_list", "s3_object_retrieve", "s3_object_exists",
+    "s3_object_tags_retrieve", "s3_file_retrieve",
 ]
 
 from importlib.metadata import version
