@@ -2,28 +2,29 @@ from logging import DEBUG, Logger
 from pathlib import Path
 from pypomes_core import (
     APP_PREFIX,
-    env_get_str, str_sanitize, str_get_positional
+    env_get_bool, env_get_str, str_sanitize, str_get_positional
 )
 from typing import Any
 
-# the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
-# specifying S3 storage parameters with environment variables can be done in two ways:
-# 1. specify the set
-#   {APP_PREFIX}_S3_ENGINE (one of 'aws', 'minio')
-#   {APP_PREFIX}_S3_ACCESS_KEY
-#   {APP_PREFIX}_S3_SECRET_KEY
-#   {APP_PREFIX}_S3_BUCKET_NAME
-#   {APP_PREFIX}_S3_TEMP_FOLDER
-#   {APP_PREFIX}_S3_REGION_NAME (for aws)
-#   {APP_PREFIX}_S3_ENDPOINT_URL (for minio)
-#   {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
-# 2. alternatively, specify a comma-separated list of servers in
-#   {APP_PREFIX}_S3_ENGINES
-#   and for each engine, specify the set above, replacing 'S3' with
-#   'AWS' and 'MINIO', respectively for the engines listed above
+# - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
+# - specifying S3 storage parameters with environment variables can be done in two ways:
+#   1. specify the set
+#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'minio')
+#     {APP_PREFIX}_S3_ACCESS_KEY
+#     {APP_PREFIX}_S3_SECRET_KEY
+#     {APP_PREFIX}_S3_BUCKET_NAME
+#     {APP_PREFIX}_S3_TEMP_FOLDER
+#     {APP_PREFIX}_S3_REGION_NAME (for aws)
+#     {APP_PREFIX}_S3_ENDPOINT_URL (for minio)
+#     {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
+#   2. alternatively, specify a comma-separated list of servers in
+#     {APP_PREFIX}_S3_ENGINES
+#     and, for each engine, specify the set above, replacing 'S3' with
+#     'AWS' and 'MINIO', respectively, for the engines listed
 
 _S3_ACCESS_DATA: dict = {}
 _S3_ENGINES: list[str] = []
+
 _prefix: str = env_get_str(f"{APP_PREFIX}_S3_ENGINE",  None)
 if _prefix:
     _default_setup: bool = True
@@ -42,7 +43,7 @@ for engine in _S3_ENGINES:
                                        list_origin=["aws", "minio"],
                                        list_dest=["AWS", "MINIO"])
     _s3_data = {
-        "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACESS_KEY"),
+        "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
         "secret-key": env_get_str(f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
         "bucket-name": env_get_str(f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
         "temp-folder": Path(env_get_str(f"{APP_PREFIX}_{_tag}_TEMP_FOLDER"))
@@ -50,8 +51,8 @@ for engine in _S3_ENGINES:
     if engine == "aws":
         _s3_data["client"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
     elif engine == "minio":
-        _s3_data["endpoit-url"] = env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL")
-        _s3_data["secure-access"] = env_get_str(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS")
+        _s3_data["endpoint-url"] = env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL")
+        _s3_data["secure-access"] = env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS")
     _S3_ACCESS_DATA[engine] = _s3_data
 
 
@@ -137,7 +138,7 @@ def _s3_except_msg(errors: list[str],
     endpoint: str = _S3_ACCESS_DATA[engine].get("region-name") if engine == "aws" else \
                     _S3_ACCESS_DATA[engine].get("endpoint-url")
     err_msg: str = f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
-    if errors:
+    if isinstance(errors, list):
         errors.append(err_msg)
     if logger:
         logger.error(err_msg)

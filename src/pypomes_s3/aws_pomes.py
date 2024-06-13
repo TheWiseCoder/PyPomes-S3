@@ -13,8 +13,8 @@ from .s3_common import (
 )
 
 
-def _access(errors: list[str],
-            logger: Logger = None) -> BaseClient:
+def access(errors: list[str],
+           logger: Logger = None) -> BaseClient:
     """
     Obtain and return a *AWS* client object.
 
@@ -42,9 +42,9 @@ def _access(errors: list[str],
     return result
 
 
-def _startup(errors: list[str],
-             bucket: str,
-             logger: Logger = None) -> bool:
+def startup(errors: list[str],
+            bucket: str,
+            logger: Logger = None) -> bool:
     """
     Prepare the *AWS* client for operations.
 
@@ -60,8 +60,8 @@ def _startup(errors: list[str],
     result: bool = False
 
     # obtain a AWS client
-    client: BaseClient = _access(errors=errors,
-                                 logger=logger)
+    client: BaseClient = access(errors=errors,
+                                logger=logger)
 
     # was the AWS client obtained ?
     if client:
@@ -80,15 +80,15 @@ def _startup(errors: list[str],
     return result
 
 
-def _file_store(errors: list[str],
-                bucket: str,
-                basepath: Path | str,
-                identifier: str,
-                filepath: Path | str,
-                mimetype: str,
-                tags: dict = None,
-                client: BaseClient = None,
-                logger: Logger = None) -> bool:
+def file_store(errors: list[str],
+               bucket: str,
+               basepath: str,
+               identifier: str,
+               filepath: Path | str,
+               mimetype: str,
+               tags: dict = None,
+               client: BaseClient = None,
+               logger: Logger = None) -> bool:
     """
     Store a file at the *AWS* store.
 
@@ -107,8 +107,8 @@ def _file_store(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -142,13 +142,13 @@ def _file_store(errors: list[str],
     return result
 
 
-def _file_retrieve(errors: list[str],
-                   bucket: str,
-                   basepath: Path | str,
-                   identifier: str,
-                   filepath: Path | str,
-                   client: BaseClient = None,
-                   logger: Logger = None) -> Any:
+def file_retrieve(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str,
+                  filepath: Path | str,
+                  client: BaseClient = None,
+                  logger: Logger = None) -> Any:
     """
     Retrieve a file from the *AWS* store.
 
@@ -165,8 +165,8 @@ def _file_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -186,18 +186,18 @@ def _file_retrieve(errors: list[str],
     return result
 
 
-def _object_exists(errors: list[str],
-                   bucket: str,
-                   basepath: Path | str,
-                   identifier: str | None,
-                   client: BaseClient = None,
-                   logger: Logger = None) -> bool:
+def object_exists(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str | None,
+                  client: BaseClient = None,
+                  logger: Logger = None) -> bool:
     """
     Determine if a given object exists in the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to locate the object at
+    :param basepath: the path specifying where to locate the object
     :param identifier: optional object identifier
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -207,27 +207,27 @@ def _object_exists(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # proceed, if the AWS client eas obtained
     if curr_client:
         # was the identifier provided ?
         if identifier is None:
             # no, object is a folder
-            objs: Iterator = _objects_list(errors=errors,
-                                           bucket=bucket,
-                                           basepath=basepath,
-                                           recursive=False,
-                                           client=curr_client,
-                                           logger=logger)
+            objs: Iterator = objects_list(errors=errors,
+                                          bucket=bucket,
+                                          basepath=basepath,
+                                          recursive=False,
+                                          client=curr_client,
+                                          logger=logger)
             result = next(objs, None) is None
         # verify the status of the object
-        elif _object_stat(errors=errors,
-                          bucket=bucket,
-                          basepath=basepath,
-                          identifier=identifier,
-                          client=curr_client,
-                          logger=logger):
+        elif object_stat(errors=errors,
+                         bucket=bucket,
+                         basepath=basepath,
+                         identifier=identifier,
+                         client=curr_client,
+                         logger=logger):
             result = True
 
         remotepath: Path = Path(basepath) / identifier
@@ -238,12 +238,12 @@ def _object_exists(errors: list[str],
     return result
 
 
-def _object_stat(errors: list[str],
-                 bucket: str,
-                 basepath: Path | str,
-                 identifier: str,
-                 client: BaseClient = None,
-                 logger: Logger = None) -> dict:
+def object_stat(errors: list[str],
+                bucket: str,
+                basepath: str,
+                identifier: str,
+                client: BaseClient = None,
+                logger: Logger = None) -> dict:
     """
     Retrieve and return the information about an object in the *AWS* store.
 
@@ -259,8 +259,8 @@ def _object_stat(errors: list[str],
     result: dict | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -279,14 +279,14 @@ def _object_stat(errors: list[str],
     return result
 
 
-def _object_store(errors: list[str],
-                  bucket: str,
-                  basepath: Path | str,
-                  identifier: str,
-                  obj: Any,
-                  tags: dict = None,
-                  client: BaseClient = None,
-                  logger: Logger = None) -> bool:
+def object_store(errors: list[str],
+                 bucket: str,
+                 basepath: str,
+                 identifier: str,
+                 obj: Any,
+                 tags: dict = None,
+                 client: BaseClient = None,
+                 logger: Logger = None) -> bool:
     """
     Store an object at the *AWS* store.
 
@@ -304,8 +304,8 @@ def _object_store(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # serialize the object into a file
@@ -316,15 +316,15 @@ def _object_store(errors: list[str],
 
         # store the file
         op_errors: list[str] = []
-        _file_store(errors=op_errors,
-                    bucket=bucket,
-                    basepath=basepath,
-                    identifier=identifier,
-                    filepath=filepath,
-                    mimetype="application/octet-stream",
-                    tags=tags,
-                    client=curr_client,
-                    logger=logger)
+        file_store(errors=op_errors,
+                   bucket=bucket,
+                   basepath=basepath,
+                   identifier=identifier,
+                   filepath=filepath,
+                   mimetype="application/octet-stream",
+                   tags=tags,
+                   client=curr_client,
+                   logger=logger)
 
         # errors ?
         if op_errors:
@@ -344,12 +344,12 @@ def _object_store(errors: list[str],
     return result
 
 
-def _object_retrieve(errors: list[str],
-                     bucket: str,
-                     basepath: Path,
-                     identifier: str,
-                     client: BaseClient = None,
-                     logger: Logger = None) -> Any:
+def object_retrieve(errors: list[str],
+                    bucket: str,
+                    basepath: str,
+                    identifier: str,
+                    client: BaseClient = None,
+                    logger: Logger = None) -> Any:
     """
     Retrieve an object from the *AWS* store.
 
@@ -365,20 +365,20 @@ def _object_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # retrieve the file containg the serialized object
         temp_folder: Path = _s3_get_param("minio", "temp-folder")
         filepath: Path = temp_folder / f"{uuid.uuid4()}.pickle"
-        stat: Any = _file_retrieve(errors=errors,
-                                   bucket=bucket,
-                                   basepath=basepath,
-                                   identifier=identifier,
-                                   filepath=filepath,
-                                   client=curr_client,
-                                   logger=logger)
+        stat: Any = file_retrieve(errors=errors,
+                                  bucket=bucket,
+                                  basepath=basepath,
+                                  identifier=identifier,
+                                  filepath=filepath,
+                                  client=curr_client,
+                                  logger=logger)
 
         # was the file retrieved ?
         if stat:
@@ -395,12 +395,12 @@ def _object_retrieve(errors: list[str],
     return result
 
 
-def _object_delete(errors: list[str],
-                   bucket: str,
-                   basepath: str,
-                   identifier: str = None,
-                   client: BaseClient = None,
-                   logger: Logger = None) -> bool:
+def object_delete(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str = None,
+                  client: BaseClient = None,
+                  logger: Logger = None) -> bool:
     """
     Remove an object from the *AWS* store.
 
@@ -416,18 +416,18 @@ def _object_delete(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # was the identifier provided ?
         if identifier is None:
             # no, remove the folder
-            __folder_delete(errors=errors,
-                            bucket=bucket,
-                            basepath=basepath,
-                            client=curr_client,
-                            logger=logger)
+            _folder_delete(errors=errors,
+                           bucket=bucket,
+                           basepath=basepath,
+                           client=curr_client,
+                           logger=logger)
         else:
             # yes, remove the object
             remotepath: Path = Path(basepath) / identifier
@@ -446,12 +446,12 @@ def _object_delete(errors: list[str],
     return result
 
 
-def _object_tags_retrieve(errors: list[str],
-                          bucket: str,
-                          basepath: str,
-                          identifier: str,
-                          client: BaseClient = None,
-                          logger: Logger = None) -> dict:
+def object_tags_retrieve(errors: list[str],
+                         bucket: str,
+                         basepath: str,
+                         identifier: str,
+                         client: BaseClient = None,
+                         logger: Logger = None) -> dict:
     """
     Retrieve and return the metadata information for an object in the *AWS* store.
 
@@ -467,8 +467,8 @@ def _object_tags_retrieve(errors: list[str],
     result: dict | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -492,12 +492,12 @@ def _object_tags_retrieve(errors: list[str],
     return result
 
 
-def _objects_list(errors: list[str],
-                  bucket: str,
-                  basepath: str,
-                  recursive: bool = False,
-                  client: BaseClient = None,
-                  logger: Logger = None) -> Iterator:
+def objects_list(errors: list[str],
+                 bucket: str,
+                 basepath: str,
+                 recursive: bool = False,
+                 client: BaseClient = None,
+                 logger: Logger = None) -> Iterator:
     """
     Retrieve and return an iterator into the list of objects at *basepath*, in the *AWS* store.
 
@@ -513,8 +513,8 @@ def _objects_list(errors: list[str],
     result: Iterator | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or _access(errors=errors,
-                                                logger=logger)
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -533,11 +533,11 @@ def _objects_list(errors: list[str],
     return result
 
 
-def __folder_delete(errors: list[str],
-                    bucket: str,
-                    basepath: str,
-                    client: BaseClient,
-                    logger: Logger = None) -> None:
+def _folder_delete(errors: list[str],
+                   bucket: str,
+                   basepath: str,
+                   client: BaseClient,
+                   logger: Logger = None) -> None:
     """
     Traverse the folders recursively, removing its objects.
 
@@ -548,11 +548,11 @@ def __folder_delete(errors: list[str],
     :param logger: optional logger
     """
     # obtain the list of entries in the given folder
-    objs: Iterator = _objects_list(errors=errors,
-                                   bucket=bucket,
-                                   basepath=basepath,
-                                   recursive=True,
-                                   logger=logger)
+    objs: Iterator = objects_list(errors=errors,
+                                  bucket=bucket,
+                                  basepath=basepath,
+                                  recursive=True,
+                                  logger=logger)
     # was the list obtained ?
     if objs:
         # yes, proceed
@@ -564,6 +564,7 @@ def __folder_delete(errors: list[str],
                         stmt=f"Removed folder {basepath}, bucket {bucket}")
             except Exception as e:
                 # SANITY CHECK: in case of concurrent exclusion
+                # ruff: noqa: PERF203
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
                     _s3_except_msg(errors=errors,
                                    exception=e,

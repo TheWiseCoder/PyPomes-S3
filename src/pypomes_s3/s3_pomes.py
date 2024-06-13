@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from .s3_common import (
-    _S3_ENGINES, _S3_ACCESS_DATA, _assert_engine
+    _S3_ENGINES, _S3_ACCESS_DATA,
+    _assert_engine, _s3_get_param
 )
 
 
@@ -147,14 +148,12 @@ def s3_access(errors: list[str] | None,
                                       engine=engine)
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._access(errors=op_errors,
-                                   logger=logger)
+        result = aws_pomes.access(errors=op_errors,
+                                  logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._access(errors=op_errors,
-                                     logger=logger)
+        result = minio_pomes.access(errors=op_errors,
+                                    logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -163,7 +162,7 @@ def s3_access(errors: list[str] | None,
 
 
 def s3_startup(errors: list[str],
-               bucket: str,
+               bucket: str = None,
                engine: str = None,
                logger: Logger = None) -> bool:
     """
@@ -173,7 +172,7 @@ def s3_startup(errors: list[str],
     to make sure the interaction with the MinIo service is fully functional.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param logger: optional logger
     :return: True if service is fully functional
@@ -187,18 +186,20 @@ def s3_startup(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._startup(errors=op_errors,
-                                    bucket=bucket,
-                                    logger=logger)
+        result = aws_pomes.startup(errors=op_errors,
+                                   bucket=bucket,
+                                   logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._startup(errors=op_errors,
-                                      bucket=bucket,
-                                      logger=logger)
+        result = minio_pomes.startup(errors=op_errors,
+                                     bucket=bucket,
+                                     logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -207,12 +208,12 @@ def s3_startup(errors: list[str],
 
 
 def s3_file_store(errors: list[str],
-                  bucket: str,
-                  basepath: Path | str,
+                  basepath: str,
                   identifier: str,
                   filepath: Path | str,
                   mimetype: str,
                   tags: dict = None,
+                  bucket: str = None,
                   engine: Any = None,
                   client: Any = None,
                   logger: Logger = None) -> bool:
@@ -220,12 +221,12 @@ def s3_file_store(errors: list[str],
     Store a file at the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to store the file at
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path specifying where the file is
     :param mimetype: the file mimetype
     :param tags: optional metadata describing the file
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -240,30 +241,32 @@ def s3_file_store(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._file_store(errors=op_errors,
-                                       bucket=bucket,
-                                       basepath=basepath,
-                                       identifier=identifier,
-                                       filepath=filepath,
-                                       mimetype=mimetype,
-                                       tags=tags,
-                                       client=client,
-                                       logger=logger)
+        result = aws_pomes.file_store(errors=op_errors,
+                                      bucket=bucket,
+                                      basepath=basepath,
+                                      identifier=identifier,
+                                      filepath=filepath,
+                                      mimetype=mimetype,
+                                      tags=tags,
+                                      client=client,
+                                      logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._file_store(errors=op_errors,
-                                         bucket=bucket,
-                                         basepath=basepath,
-                                         identifier=identifier,
-                                         filepath=filepath,
-                                         mimetype=mimetype,
-                                         tags=tags,
-                                         client=client,
-                                         logger=logger)
+        result = minio_pomes.file_store(errors=op_errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        identifier=identifier,
+                                        filepath=filepath,
+                                        mimetype=mimetype,
+                                        tags=tags,
+                                        client=client,
+                                        logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -272,10 +275,10 @@ def s3_file_store(errors: list[str],
 
 
 def s3_file_retrieve(errors: list[str],
-                     bucket: str,
-                     basepath: Path | str,
+                     basepath: str,
                      identifier: str,
                      filepath: Path | str,
+                     bucket: str = None,
                      engine: str = None,
                      client: Any = None,
                      logger: Logger = None) -> Any:
@@ -283,10 +286,10 @@ def s3_file_retrieve(errors: list[str],
     Retrieve a file from the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to retrieve the file from
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -301,26 +304,28 @@ def s3_file_retrieve(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._file_retrieve(errors=op_errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          identifier=identifier,
-                                          filepath=filepath,
-                                          client=client,
-                                          logger=logger)
+        result = aws_pomes.file_retrieve(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         filepath=filepath,
+                                         client=client,
+                                         logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._file_retrieve(errors=op_errors,
-                                            bucket=bucket,
-                                            basepath=basepath,
-                                            identifier=identifier,
-                                            filepath=filepath,
-                                            client=client,
-                                            logger=logger)
+        result = minio_pomes.file_retrieve(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           filepath=filepath,
+                                           client=client,
+                                           logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -329,9 +334,9 @@ def s3_file_retrieve(errors: list[str],
 
 
 def s3_object_exists(errors: list[str],
-                     bucket: str,
-                     basepath: Path | str,
+                     basepath: str,
                      identifier: str | None,
+                     bucket: str = None,
                      engine: str = None,
                      client: Any = None,
                      logger: Logger = None) -> bool:
@@ -339,9 +344,9 @@ def s3_object_exists(errors: list[str],
     Determine if a given object exists in the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to locate the object at
+    :param basepath: the path specifying where to locate the object
     :param identifier: optional object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -356,24 +361,26 @@ def s3_object_exists(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_exists(errors=op_errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          identifier=identifier,
-                                          client=client,
-                                          logger=logger)
+        result = aws_pomes.object_exists(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         client=client,
+                                         logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_exists(errors=op_errors,
-                                            bucket=bucket,
-                                            basepath=basepath,
-                                            identifier=identifier,
-                                            client=client,
-                                            logger=logger)
+        result = minio_pomes.object_exists(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           client=client,
+                                           logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -382,9 +389,9 @@ def s3_object_exists(errors: list[str],
 
 
 def s3_object_stat(errors: list[str],
-                   bucket: str,
-                   basepath: Path | str,
+                   basepath: str,
                    identifier: str,
+                   bucket: str = None,
                    engine: str = None,
                    client: Any = None,
                    logger: Logger = None) -> Any:
@@ -392,9 +399,9 @@ def s3_object_stat(errors: list[str],
     Retrieve and return the information about an object in the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying where to locate the object
     :param identifier: the object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -409,24 +416,26 @@ def s3_object_stat(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_stat(errors=op_errors,
-                                        bucket=bucket,
-                                        basepath=basepath,
-                                        identifier=identifier,
-                                        client=client,
-                                        logger=logger)
+        result = aws_pomes.object_stat(errors=op_errors,
+                                       bucket=bucket,
+                                       basepath=basepath,
+                                       identifier=identifier,
+                                       client=client,
+                                       logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_stat(errors=op_errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          identifier=identifier,
-                                          client=client,
-                                          logger=logger)
+        result = minio_pomes.object_stat(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         client=client,
+                                         logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -435,11 +444,11 @@ def s3_object_stat(errors: list[str],
 
 
 def s3_object_store(errors: list[str],
-                    bucket: str,
-                    basepath: Path | str,
+                    basepath: str,
                     identifier: str,
                     obj: Any,
                     tags: dict = None,
+                    bucket: str = None,
                     engine: str = None,
                     client: Any = None,
                     logger: Logger = None) -> bool:
@@ -447,12 +456,12 @@ def s3_object_store(errors: list[str],
     Store an object at the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to store the object at
     :param identifier: the object identifier
     :param obj: object to be stored
     :param tags: optional metadata describing the object
     :param engine: the S3 engine to use (uses the default engine, if not provided)
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: True if the object was successfully stored, False otherwise
@@ -466,28 +475,30 @@ def s3_object_store(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_store(errors=op_errors,
-                                         bucket=bucket,
-                                         basepath=basepath,
-                                         identifier=identifier,
-                                         obj=obj,
-                                         tags=tags,
-                                         client=client,
-                                         logger=logger)
+        result = aws_pomes.object_store(errors=op_errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        identifier=identifier,
+                                        obj=obj,
+                                        tags=tags,
+                                        client=client,
+                                        logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_store(errors=op_errors,
-                                           bucket=bucket,
-                                           basepath=basepath,
-                                           identifier=identifier,
-                                           obj=obj,
-                                           tags=tags,
-                                           client=client,
-                                           logger=logger)
+        result = minio_pomes.object_store(errors=op_errors,
+                                          bucket=bucket,
+                                          basepath=basepath,
+                                          identifier=identifier,
+                                          obj=obj,
+                                          tags=tags,
+                                          client=client,
+                                          logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -496,9 +507,9 @@ def s3_object_store(errors: list[str],
 
 
 def s3_object_retrieve(errors: list[str],
-                       bucket: str,
-                       basepath: Path,
+                       basepath: str,
                        identifier: str,
+                       bucket: str = None,
                        engine: str = None,
                        client: Any = None,
                        logger: Logger = None) -> Any:
@@ -506,9 +517,9 @@ def s3_object_retrieve(errors: list[str],
     Retrieve an object from the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to retrieve the object from
     :param identifier: the object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -523,24 +534,26 @@ def s3_object_retrieve(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_retrieve(errors=op_errors,
-                                            bucket=bucket,
-                                            basepath=basepath,
-                                            identifier=identifier,
-                                            client=client,
-                                            logger=logger)
+        result = aws_pomes.object_retrieve(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           client=client,
+                                           logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_retrieve(errors=op_errors,
-                                              bucket=bucket,
-                                              basepath=basepath,
-                                              identifier=identifier,
-                                              client=client,
-                                              logger=logger)
+        result = minio_pomes.object_retrieve(errors=op_errors,
+                                             bucket=bucket,
+                                             basepath=basepath,
+                                             identifier=identifier,
+                                             client=client,
+                                             logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -549,9 +562,9 @@ def s3_object_retrieve(errors: list[str],
 
 
 def s3_object_delete(errors: list[str],
-                     bucket: str,
                      basepath: str,
                      identifier: str = None,
+                     bucket: str = None,
                      engine: str = None,
                      client: Any = None,
                      logger: Logger = None) -> bool:
@@ -559,9 +572,9 @@ def s3_object_delete(errors: list[str],
     Remove an object from the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to retrieve the object from
     :param identifier: optional object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -576,24 +589,26 @@ def s3_object_delete(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_delete(errors=op_errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          identifier=identifier,
-                                          client=client,
-                                          logger=logger)
+        result = aws_pomes.object_delete(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         client=client,
+                                         logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_delete(errors=op_errors,
-                                            bucket=bucket,
-                                            basepath=basepath,
-                                            identifier=identifier,
-                                            client=client,
-                                            logger=logger)
+        result = minio_pomes.object_delete(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           client=client,
+                                           logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -602,9 +617,9 @@ def s3_object_delete(errors: list[str],
 
 
 def s3_object_tags_retrieve(errors: list[str],
-                            bucket: str,
                             basepath: str,
                             identifier: str,
+                            bucket: str = None,
                             engine: str = None,
                             client: Any = None,
                             logger: Logger = None) -> dict:
@@ -612,9 +627,9 @@ def s3_object_tags_retrieve(errors: list[str],
     Retrieve and return the metadata information for an object in the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to retrieve the object from
     :param identifier: the object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -629,24 +644,26 @@ def s3_object_tags_retrieve(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._object_tags_retrieve(errors=op_errors,
-                                                 bucket=bucket,
-                                                 basepath=basepath,
-                                                 identifier=identifier,
-                                                 client=client,
-                                                 logger=logger)
+        result = aws_pomes.object_tags_retrieve(errors=op_errors,
+                                                bucket=bucket,
+                                                basepath=basepath,
+                                                identifier=identifier,
+                                                client=client,
+                                                logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._object_tags_retrieve(errors=op_errors,
-                                                   bucket=bucket,
-                                                   basepath=basepath,
-                                                   identifier=identifier,
-                                                   client=client,
-                                                   logger=logger)
+        result = minio_pomes.object_tags_retrieve(errors=op_errors,
+                                                  bucket=bucket,
+                                                  basepath=basepath,
+                                                  identifier=identifier,
+                                                  client=client,
+                                                  logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
@@ -656,8 +673,8 @@ def s3_object_tags_retrieve(errors: list[str],
 
 def s3_objects_list(errors: list[str],
                     basepath: str,
-                    bucket: str,
                     recursive: bool = False,
+                    bucket: str = None,
                     engine: str = None,
                     client: Any = None,
                     logger: Logger = None) -> Iterator:
@@ -665,9 +682,9 @@ def s3_objects_list(errors: list[str],
     Retrieve and return an iterator into the list of objects at *basepath*, in the S3 store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
     :param basepath: the path specifying the location to iterate from
     :param recursive: whether the location is iterated recursively
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -682,24 +699,26 @@ def s3_objects_list(errors: list[str],
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
-        # noinspection PyProtectedMember
-        result = aws_pomes._objects_list(errors=op_errors,
-                                         bucket=bucket,
-                                         basepath=basepath,
-                                         recursive=recursive,
-                                         client=client,
-                                         logger=logger)
+        result = aws_pomes.objects_list(errors=op_errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        recursive=recursive,
+                                        client=client,
+                                        logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
-        # noinspection PyProtectedMember
-        result = minio_pomes._objects_list(errors=op_errors,
-                                           bucket=bucket,
-                                           basepath=basepath,
-                                           recursive=recursive,
-                                           client=client,
-                                           logger=logger)
+        result = minio_pomes.objects_list(errors=op_errors,
+                                          bucket=bucket,
+                                          basepath=basepath,
+                                          recursive=recursive,
+                                          client=client,
+                                          logger=logger)
 
     # acknowledge eventual local errors
     errors.extend(op_errors)
