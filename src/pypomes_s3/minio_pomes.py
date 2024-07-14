@@ -1,13 +1,16 @@
 import pickle
 import uuid
 from collections.abc import Iterator
+from io import BytesIO
 from logging import Logger
 from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
-from typing import Any
+from pypomes_http import MIMETYPE_BINARY
+from typing import Any, BinaryIO
 from unidecode import unidecode
+from urllib3.response import HTTPResponse
 
 from .s3_common import (
     _s3_get_param, _s3_get_params, _s3_except_msg, _s3_log
@@ -84,13 +87,125 @@ def startup(errors: list[str],
     return result
 
 
+def data_store(errors: list[str],
+               bucket: str,
+               basepath: str,
+               identifier: str,
+               data: bytes | str | BinaryIO,
+               length: int = -1,
+               mimetype: str = MIMETYPE_BINARY,
+               tags: dict[str, Any] = None,
+               client: Minio = None,
+               logger: Logger = None) -> bool:
+    """
+    Store data at the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying the location to store the file at
+    :param identifier: the data identifier
+    :param data: the data to store
+    :param length: the length of the data (defaults to -1: unknown)
+    :param mimetype: the data mimetype
+    :param tags: optional metadata describing the file
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: 'True' if the data was successfully stored, 'False' otherwise
+    """
+    # initialize the return variable
+    result: bool = False
+
+    # make sure to have a MinIO client
+    curr_client: Minio = client or access(errors=errors,
+                                          logger=logger)
+    # was the MinIO client obtained ?
+    if curr_client:
+        # yes, proceed
+        remote_path: Path = Path(basepath) / identifier
+
+        # store the data
+        bin_data: BinaryIO
+        if isinstance(data, BinaryIO):
+            bin_data = data
+        else:
+            bin_data = BytesIO(data)
+            bin_data.seek(0)
+        try:
+            curr_client.put_object(bucket_name=bucket,
+                                   object_name=str(remote_path),
+                                   data=bin_data,
+                                   length=length,
+                                   content_type=mimetype,
+                                   tags=__normalize_tags(tags))
+            result = True
+            _s3_log(logger=logger,
+                    stmt=(f"Stored {remote_path}, bucket {bucket}, "
+                          f"content type {mimetype}, tags {tags}"))
+        except Exception as e:
+            _s3_except_msg(errors=errors,
+                           exception=e,
+                           engine="minio",
+                           logger=logger)
+    return result
+
+
+def data_retrieve(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str,
+                  offset: int = 0,
+                  length: int = 0,
+                  client: Minio = None,
+                  logger: Logger = None) -> bytes:
+    """
+    Retrieve data from the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying the location to retrieve the file from
+    :param identifier: the data identifier
+    :param offset: the start position within the data (in bytes, defaults to 0: data start)
+    :param length: the length of the data to retrieve (in bytes, defaults to 0: to data finish)
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: the bytes retrieved, or 'None' if an error ocurred
+    """
+    # initialize the return variable
+    result: bytes | None = None
+
+    # make sure to have a MinIO client
+    curr_client: Minio = client or access(errors=errors,
+                                          logger=logger)
+    # was the MinIO client obtained ?
+    if curr_client:
+        # yes, proceed
+        remote_path: Path = Path(basepath) / identifier
+
+        # retrieve the data
+        try:
+            response: HTTPResponse = curr_client.get_object(bucket_name=bucket,
+                                                            object_name=str(remote_path),
+                                                            offset=offset,
+                                                            length=length)
+            result = response.data
+            _s3_log(logger=logger,
+                    stmt=f"Retrieved {remote_path}, bucket {bucket}")
+        except Exception as e:
+            if not hasattr(e, "code") or e.code != "NoSuchKey":
+                _s3_except_msg(errors=errors,
+                               exception=e,
+                               engine="minio",
+                               logger=logger)
+    return result
+
+
 def file_store(errors: list[str],
                bucket: str,
                basepath: str,
                identifier: str,
                filepath: Path | str,
                mimetype: str,
-               tags: dict = None,
+               tags: dict[str, Any] = None,
                client: Minio = None,
                logger: Logger = None) -> bool:
     """
@@ -116,27 +231,18 @@ def file_store(errors: list[str],
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        # have tags been defined ?
-        if tags:
-            # yes, store them
-            doc_tags = Tags(for_object=True)
-            for key, value in tags.items():
-                # normalize text, by removing all diacritics
-                doc_tags[key] = unidecode(value)
-        else:
-            # no
-            doc_tags = None
+        remote_path: Path = Path(basepath) / identifier
+
         # store the file
         try:
             curr_client.fput_object(bucket_name=bucket,
-                                    object_name=f"{remotepath}",
+                                    object_name=str(remote_path),
                                     file_path=filepath,
                                     content_type=mimetype,
-                                    tags=doc_tags)
+                                    tags=__normalize_tags(tags))
             result = True
             _s3_log(logger=logger,
-                    stmt=(f"Stored {remotepath}, bucket {bucket}, "
+                    stmt=(f"Stored {remote_path}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
         except Exception as e:
             _s3_except_msg(errors=errors,
@@ -163,7 +269,7 @@ def file_retrieve(errors: list[str],
     :param filepath: the path to save the retrieved file at
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the file retrieved
+    :return: information about the file retrieved, or 'None' if an error ocurred
     """
     # initialize the return variable
     result: Any = None
@@ -190,105 +296,12 @@ def file_retrieve(errors: list[str],
     return result
 
 
-def object_exists(errors: list[str],
-                  bucket: str,
-                  basepath: str,
-                  identifier: str | None,
-                  client: Minio = None,
-                  logger: Logger = None) -> bool:
-    """
-    Determine if a given object exists in the *MinIO* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: optional object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: 'True' if the object was found, 'False' otherwise
-    """
-    # initialize the return variable
-    result: bool = False
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
-    # proceed, if the MinIO client eas obtained
-    if curr_client:
-        # was the identifier provided ?
-        if not identifier:
-            # no, object is a folder
-            objs: Iterator = objects_list(errors=errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          recursive=False,
-                                          client=curr_client,
-                                          logger=logger)
-            result = next(objs, None) is None
-        # verify the status of the object
-        elif object_stat(errors=errors,
-                         bucket=bucket,
-                         basepath=basepath,
-                         identifier=identifier,
-                         client=curr_client,
-                         logger=logger):
-            result = True
-
-        remotepath: Path = Path(basepath) / identifier
-        existence: str = "exists" if result else "do not exist"
-        _s3_log(logger=logger,
-                stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
-
-    return result
-
-
-def object_stat(errors: list[str],
-                bucket: str,
-                basepath: str,
-                identifier: str,
-                client: Minio = None,
-                logger: Logger = None) -> MinioObject:
-    """
-    Retrieve and return the information about an object in the *MinIO* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: the object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: metadata and information about the object
-    """
-    # initialize the return variable
-    result: MinioObject | None = None
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        try:
-            result = curr_client.stat_object(bucket_name=bucket,
-                                             object_name=f"{remotepath}")
-            _s3_log(logger=logger,
-                    stmt=f"Stat'ed {remotepath}, bucket {bucket}")
-        except Exception as e:
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="minio",
-                               logger=logger)
-    return result
-
-
 def object_store(errors: list[str],
                  bucket: str,
                  basepath: str,
                  identifier: str,
                  obj: Any,
-                 tags: dict = None,
+                 tags: dict[str, Any] = None,
                  client: Minio = None,
                  logger: Logger = None) -> bool:
     """
@@ -329,7 +342,6 @@ def object_store(errors: list[str],
                    tags=tags,
                    client=curr_client,
                    logger=logger)
-
         # errors ?
         if op_errors:
             # yes, report them
@@ -383,7 +395,6 @@ def object_retrieve(errors: list[str],
                                   filepath=filepath,
                                   client=curr_client,
                                   logger=logger)
-
         # was the file retrieved ?
         if stat:
             # yes, umarshall the corresponding object
@@ -399,14 +410,108 @@ def object_retrieve(errors: list[str],
     return result
 
 
-def object_delete(errors: list[str],
-                  bucket: str,
-                  basepath: str,
-                  identifier: str = None,
-                  client: Minio = None,
-                  logger: Logger = None) -> bool:
+def item_exists(errors: list[str],
+                bucket: str,
+                basepath: str,
+                identifier: str | None,
+                client: Minio = None,
+                logger: Logger = None) -> bool:
     """
-    Remove an object from the *MinIO* store.
+    Determine if a given object exists in the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying where to locate the object
+    :param identifier: optional object identifier
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: 'True' if the object was found, 'False' otherwise
+    """
+    # initialize the return variable
+    result: bool = False
+
+    # make sure to have a MinIO client
+    curr_client: Minio = client or access(errors=errors,
+                                          logger=logger)
+    # proceed, if the MinIO client eas obtained
+    if curr_client:
+        # was the identifier provided ?
+        if not identifier:
+            # no, object is a folder
+            objs: Iterator = items_list(errors=errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        recursive=False,
+                                        client=curr_client,
+                                        logger=logger)
+            result = next(objs, None) is None
+
+        # verify the status of the object
+        elif item_stat(errors=errors,
+                       bucket=bucket,
+                       basepath=basepath,
+                       identifier=identifier,
+                       client=curr_client,
+                       logger=logger):
+            result = True
+
+        remotepath: Path = Path(basepath) / identifier
+        existence: str = "exists" if result else "do not exist"
+        _s3_log(logger=logger,
+                stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
+
+    return result
+
+
+def item_stat(errors: list[str],
+              bucket: str,
+              basepath: str,
+              identifier: str,
+              client: Minio = None,
+              logger: Logger = None) -> MinioObject:
+    """
+    Retrieve and return the information about an item in the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying where to locate the object
+    :param identifier: the object identifier
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: metadata and information about the item, or 'None' if an error ocurred
+    """
+    # initialize the return variable
+    result: MinioObject | None = None
+
+    # make sure to have a MinIO client
+    curr_client: Minio = client or access(errors=errors,
+                                          logger=logger)
+    # was the MinIO client obtained ?
+    if curr_client:
+        # yes, proceed
+        remotepath: Path = Path(basepath) / identifier
+        try:
+            result = curr_client.stat_object(bucket_name=bucket,
+                                             object_name=f"{remotepath}")
+            _s3_log(logger=logger,
+                    stmt=f"Stat'ed {remotepath}, bucket {bucket}")
+        except Exception as e:
+            if not hasattr(e, "code") or e.code != "NoSuchKey":
+                _s3_except_msg(errors=errors,
+                               exception=e,
+                               engine="minio",
+                               logger=logger)
+    return result
+
+
+def item_remove(errors: list[str],
+                bucket: str,
+                basepath: str,
+                identifier: str = None,
+                client: Minio = None,
+                logger: Logger = None) -> bool:
+    """
+    Remove an item from the *MinIO* store.
 
     If *identifier* is not provided, then the folder *basepath* is deleted
 
@@ -416,7 +521,7 @@ def object_delete(errors: list[str],
     :param identifier: optional object identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the object or folder was deleted or did not exist, 'False' if an error ocurred
+    :return: 'True' if the item or folder was deleted or did not exist, 'False' if an error ocurred
     """
     # initialize the return variable
     result: bool = False
@@ -452,14 +557,14 @@ def object_delete(errors: list[str],
     return result
 
 
-def object_tags_retrieve(errors: list[str],
-                         bucket: str,
-                         basepath: str,
-                         identifier: str,
-                         client: Minio = None,
-                         logger: Logger = None) -> dict:
+def item_tags_retrieve(errors: list[str],
+                       bucket: str,
+                       basepath: str,
+                       identifier: str,
+                       client: Minio = None,
+                       logger: Logger = None) -> dict[str, Any]:
     """
-    Retrieve and return the metadata information for an object in the *MinIO* store.
+    Retrieve and return the metadata information for an item in the *MinIO* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
@@ -467,10 +572,10 @@ def object_tags_retrieve(errors: list[str],
     :param identifier: the object identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the metadata about the object
+    :return: the metadata about the item, or 'None' if not found or if an error ocurred
     """
     # initialize the return variable
-    result: dict | None = None
+    result: dict[str, Any] | None = None
 
     # make sure to have a MinIO client
     curr_client: Minio = client or access(errors=errors,
@@ -498,14 +603,14 @@ def object_tags_retrieve(errors: list[str],
     return result
 
 
-def objects_list(errors: list[str],
-                 bucket: str,
-                 basepath: str,
-                 recursive: bool = False,
-                 client: Minio = None,
-                 logger: Logger = None) -> Iterator:
+def items_list(errors: list[str],
+               bucket: str,
+               basepath: str,
+               recursive: bool = False,
+               client: Minio = None,
+               logger: Logger = None) -> Iterator:
     """
-    Retrieve and return an iterator into the list of objects at *basepath*, in the *MinIO* store.
+    Retrieve and return an iterator into the list of items at *basepath*, in the *MinIO* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
@@ -513,7 +618,7 @@ def objects_list(errors: list[str],
     :param recursive: whether the location is iterated recursively
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the iterator into the list of objects, 'None' if the folder does not exist
+    :return: the iterator into the list of items, 'None' if the folder does not exist
     """
     # initialize the return variable
     result: Iterator | None = None
@@ -535,7 +640,6 @@ def objects_list(errors: list[str],
                            exception=e,
                            engine="minio",
                            logger=logger)
-
     return result
 
 
@@ -557,11 +661,11 @@ def _folder_delete(errors: list[str],
     result: bool = True
 
     # obtain the list of entries in the given folder
-    objs: Iterator = objects_list(errors=errors,
-                                  bucket=bucket,
-                                  basepath=basepath,
-                                  recursive=True,
-                                  logger=logger) or []
+    objs: Iterator = items_list(errors=errors,
+                                bucket=bucket,
+                                basepath=basepath,
+                                recursive=True,
+                                logger=logger) or []
     # traverse the list
     for obj in objs:
         try:
@@ -578,5 +682,22 @@ def _folder_delete(errors: list[str],
                                exception=e,
                                engine="minio",
                                logger=logger)
+    return result
+
+
+def __normalize_tags(tags: dict[str, Any]) -> Tags:
+
+    # initialize return variable
+    result: Tags | None
+
+    # have tags been defined ?
+    if tags:
+        # yes, process them
+        result = Tags(for_object=True)
+        for key, value in tags.items():
+            # normalize text, by removing all diacritics
+            result[key] = unidecode(value)
+    else:
+        result = None
 
     return result

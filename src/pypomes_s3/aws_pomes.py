@@ -86,7 +86,7 @@ def file_store(errors: list[str],
                identifier: str,
                filepath: Path | str,
                mimetype: str,
-               tags: dict = None,
+               tags: dict[str, Any] = None,
                client: BaseClient = None,
                logger: Logger = None) -> bool:
     """
@@ -101,7 +101,7 @@ def file_store(errors: list[str],
     :param tags: optional metadata describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: True if the file was successfully stored, False otherwise
+    :return: 'True' if the file was successfully stored, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -159,7 +159,7 @@ def file_retrieve(errors: list[str],
     :param filepath: the path to save the retrieved file at
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the file retrieved
+    :return: information about the file retrieved, or 'None' if an error ocurred
     """
     # initialize the return variable
     result: Any = None
@@ -186,105 +186,12 @@ def file_retrieve(errors: list[str],
     return result
 
 
-def object_exists(errors: list[str],
-                  bucket: str,
-                  basepath: str,
-                  identifier: str | None,
-                  client: BaseClient = None,
-                  logger: Logger = None) -> bool:
-    """
-    Determine if a given object exists in the *AWS* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: optional object identifier
-    :param client: optional AWS client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: True if the object was found, false otherwise
-    """
-    # initialize the return variable
-    result: bool = False
-
-    # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
-    # proceed, if the AWS client eas obtained
-    if curr_client:
-        # was the identifier provided ?
-        if identifier is None:
-            # no, object is a folder
-            objs: Iterator = objects_list(errors=errors,
-                                          bucket=bucket,
-                                          basepath=basepath,
-                                          recursive=False,
-                                          client=curr_client,
-                                          logger=logger)
-            result = next(objs, None) is None
-        # verify the status of the object
-        elif object_stat(errors=errors,
-                         bucket=bucket,
-                         basepath=basepath,
-                         identifier=identifier,
-                         client=curr_client,
-                         logger=logger):
-            result = True
-
-        remotepath: Path = Path(basepath) / identifier
-        existence: str = "exists" if result else "do not exist"
-        _s3_log(logger=logger,
-                stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
-
-    return result
-
-
-def object_stat(errors: list[str],
-                bucket: str,
-                basepath: str,
-                identifier: str,
-                client: BaseClient = None,
-                logger: Logger = None) -> dict:
-    """
-    Retrieve and return the information about an object in the *AWS* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: the object identifier
-    :param client: optional AWS client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: metadata and information about the object
-    """
-    # initialize the return variable
-    result: dict | None = None
-
-    # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
-    # was the AWS client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        try:
-            result = curr_client.stat_object(bucket_name=bucket,
-                                             object_name=f"{remotepath}")
-            _s3_log(logger=logger,
-                    stmt=f"Stat'ed {remotepath}, bucket {bucket}")
-        except Exception as e:
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="aws",
-                               logger=logger)
-    return result
-
-
 def object_store(errors: list[str],
                  bucket: str,
                  basepath: str,
                  identifier: str,
                  obj: Any,
-                 tags: dict = None,
+                 tags: dict[str, Any] = None,
                  client: BaseClient = None,
                  logger: Logger = None) -> bool:
     """
@@ -298,7 +205,7 @@ def object_store(errors: list[str],
     :param tags: optional metadata describing the object
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: True if the object was successfully stored, False otherwise
+    :return: 'True' if the object was successfully stored, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -359,7 +266,7 @@ def object_retrieve(errors: list[str],
     :param identifier: the object identifier
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the object retrieved
+    :return: the object retrieved, or 'None' if an error ocurred
     """
     # initialize the return variable
     result: Any = None
@@ -395,22 +302,115 @@ def object_retrieve(errors: list[str],
     return result
 
 
-def object_delete(errors: list[str],
-                  bucket: str,
-                  basepath: str,
-                  identifier: str = None,
-                  client: BaseClient = None,
-                  logger: Logger = None) -> bool:
+def item_exists(errors: list[str],
+                bucket: str,
+                basepath: str,
+                identifier: str | None,
+                client: BaseClient = None,
+                logger: Logger = None) -> bool:
+    """
+    Determine if a given object exists in the *AWS* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying where to locate the object
+    :param identifier: optional object identifier
+    :param client: optional AWS client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: 'True' if the object was found, 'False' otherwise
+    """
+    # initialize the return variable
+    result: bool = False
+
+    # make sure to have a AWS client
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
+    # proceed, if the AWS client eas obtained
+    if curr_client:
+        # was the identifier provided ?
+        if identifier is None:
+            # no, object is a folder
+            objs: Iterator = items_list(errors=errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        recursive=False,
+                                        client=curr_client,
+                                        logger=logger)
+            result = next(objs, None) is None
+        # verify the status of the object
+        elif item_stat(errors=errors,
+                       bucket=bucket,
+                       basepath=basepath,
+                       identifier=identifier,
+                       client=curr_client,
+                       logger=logger):
+            result = True
+
+        remotepath: Path = Path(basepath) / identifier
+        existence: str = "exists" if result else "do not exist"
+        _s3_log(logger=logger,
+                stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
+
+    return result
+
+
+def item_stat(errors: list[str],
+              bucket: str,
+              basepath: str,
+              identifier: str,
+              client: BaseClient = None,
+              logger: Logger = None) -> dict:
+    """
+    Retrieve and return the information about an object in the *AWS* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying where to locate the object
+    :param identifier: the object identifier
+    :param client: optional AWS client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: metadata and information about the object, or 'None' if an error ocurred
+    """
+    # initialize the return variable
+    result: dict | None = None
+
+    # make sure to have a AWS client
+    curr_client: BaseClient = client or access(errors=errors,
+                                               logger=logger)
+    # was the AWS client obtained ?
+    if curr_client:
+        # yes, proceed
+        remotepath: Path = Path(basepath) / identifier
+        try:
+            result = curr_client.stat_object(bucket_name=bucket,
+                                             object_name=f"{remotepath}")
+            _s3_log(logger=logger,
+                    stmt=f"Stat'ed {remotepath}, bucket {bucket}")
+        except Exception as e:
+            if not hasattr(e, "code") or e.code != "NoSuchKey":
+                _s3_except_msg(errors=errors,
+                               exception=e,
+                               engine="aws",
+                               logger=logger)
+    return result
+
+
+def item_remove(errors: list[str],
+                bucket: str,
+                basepath: str,
+                identifier: str = None,
+                client: BaseClient = None,
+                logger: Logger = None) -> bool:
     """
     Remove an object from the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the object from
+    :param basepath: the path specifying the object's remote location
     :param identifier: optional object identifier
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: True if the object was successfully deleted, False otherwise
+    :return: 'True' if the object was successfully removed, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -446,12 +446,12 @@ def object_delete(errors: list[str],
     return result
 
 
-def object_tags_retrieve(errors: list[str],
-                         bucket: str,
-                         basepath: str,
-                         identifier: str,
-                         client: BaseClient = None,
-                         logger: Logger = None) -> dict:
+def item_tags_retrieve(errors: list[str],
+                       bucket: str,
+                       basepath: str,
+                       identifier: str,
+                       client: BaseClient = None,
+                       logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return the metadata information for an object in the *AWS* store.
 
@@ -461,10 +461,10 @@ def object_tags_retrieve(errors: list[str],
     :param identifier: the object identifier
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the metadata about the object
+    :return: the metadata about the object, or 'None' if an error ocurred
     """
     # initialize the return variable
-    result: dict | None = None
+    result: dict[str, Any] | None = None
 
     # make sure to have a AWS client
     curr_client: BaseClient = client or access(errors=errors,
@@ -492,12 +492,12 @@ def object_tags_retrieve(errors: list[str],
     return result
 
 
-def objects_list(errors: list[str],
-                 bucket: str,
-                 basepath: str,
-                 recursive: bool = False,
-                 client: BaseClient = None,
-                 logger: Logger = None) -> Iterator:
+def items_list(errors: list[str],
+               bucket: str,
+               basepath: str,
+               recursive: bool = False,
+               client: BaseClient = None,
+               logger: Logger = None) -> Iterator:
     """
     Retrieve and return an iterator into the list of objects at *basepath*, in the *AWS* store.
 
@@ -507,7 +507,7 @@ def objects_list(errors: list[str],
     :param recursive: whether the location is iterated recursively
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the iterator into the list of objects, 'None' if the folder does not exist
+    :return: the iterator into the list of objects, or 'None' if the folder does not exist
     """
     # initialize the return variable
     result: Iterator | None = None
@@ -548,11 +548,11 @@ def _folder_delete(errors: list[str],
     :param logger: optional logger
     """
     # obtain the list of entries in the given folder
-    objs: Iterator = objects_list(errors=errors,
-                                  bucket=bucket,
-                                  basepath=basepath,
-                                  recursive=True,
-                                  logger=logger)
+    objs: Iterator = items_list(errors=errors,
+                                bucket=bucket,
+                                basepath=basepath,
+                                recursive=True,
+                                logger=logger)
     # was the list obtained ?
     if objs:
         # yes, proceed

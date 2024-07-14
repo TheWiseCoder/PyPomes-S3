@@ -1,14 +1,20 @@
 from .s3_pomes import (
-    s3_access, s3_startup, s3_file_store, s3_object_store, s3_object_stat,
-    s3_object_delete, s3_objects_list, s3_object_retrieve, s3_object_exists,
-    s3_object_tags_retrieve, s3_file_retrieve,
+    s3_access, s3_startup,
+    s3_data_store, s3_data_retrieve,
+    s3_file_store, s3_file_retrieve,
+    s3_object_store, s3_object_retrieve,
+    s3_item_exists, s3_item_stat,
+    s3_item_remove, s3_item_tags_retrieve, s3_items_list,
 )
 
 __all__ = [
     # s3_pomes
-    "s3_access", "s3_startup", "s3_file_store", "s3_object_store", "s3_object_stat",
-    "s3_object_delete", "s3_objects_list", "s3_object_retrieve", "s3_object_exists",
-    "s3_object_tags_retrieve", "s3_file_retrieve",
+    "s3_access", "s3_startup",
+    "s3_data_store", "s3_data_retrieve",
+    "s3_file_store", "s3_file_retrieve",
+    "s3_object_store", "s3_object_retrieve",
+    "s3_item_exists", "s3_item_stat",
+    "s3_item_remove", "s3_item_tags_retrieve", "s3_items_list",
 ]
 
 from importlib.metadata import version
