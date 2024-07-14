@@ -7,6 +7,7 @@ from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
+from pypomes_core import str_to_hex, str_from_hex
 from pypomes_http import MIMETYPE_BINARY
 from typing import Any, BinaryIO
 from unidecode import unidecode
@@ -94,7 +95,7 @@ def data_store(errors: list[str],
                data: bytes | str | BinaryIO,
                length: int = -1,
                mimetype: str = MIMETYPE_BINARY,
-               tags: dict[str, Any] = None,
+               tags: dict[str, str] = None,
                client: Minio = None,
                logger: Logger = None) -> bool:
     """
@@ -205,7 +206,7 @@ def file_store(errors: list[str],
                identifier: str,
                filepath: Path | str,
                mimetype: str,
-               tags: dict[str, Any] = None,
+               tags: dict[str, str] = None,
                client: Minio = None,
                logger: Logger = None) -> bool:
     """
@@ -301,7 +302,7 @@ def object_store(errors: list[str],
                  basepath: str,
                  identifier: str,
                  obj: Any,
-                 tags: dict[str, Any] = None,
+                 tags: dict[str, str] = None,
                  client: Minio = None,
                  logger: Logger = None) -> bool:
     """
@@ -557,52 +558,6 @@ def item_remove(errors: list[str],
     return result
 
 
-def item_tags_retrieve(errors: list[str],
-                       bucket: str,
-                       basepath: str,
-                       identifier: str,
-                       client: Minio = None,
-                       logger: Logger = None) -> dict[str, Any]:
-    """
-    Retrieve and return the metadata information for an item in the *MinIO* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the object from
-    :param identifier: the object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: the metadata about the item, or 'None' if not found or if an error ocurred
-    """
-    # initialize the return variable
-    result: dict[str, Any] | None = None
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        try:
-            tags: Tags = curr_client.get_object_tags(bucket_name=bucket,
-                                                     object_name=f"{remotepath}")
-            if tags and len(tags) > 0:
-                result = {}
-                for key, value in tags.items():
-                    result[key] = value
-            _s3_log(logger=logger,
-                    stmt=f"Retrieved {remotepath}, bucket {bucket}, tags {result}")
-        except Exception as e:
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="minio",
-                               logger=logger)
-
-    return result
-
-
 def items_list(errors: list[str],
                bucket: str,
                basepath: str,
@@ -640,6 +595,52 @@ def items_list(errors: list[str],
                            exception=e,
                            engine="minio",
                            logger=logger)
+    return result
+
+
+def tags_retrieve(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str,
+                  client: Minio = None,
+                  logger: Logger = None) -> dict[str, str]:
+    """
+    Retrieve and return the metadata information for an item in the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying the location to retrieve the object from
+    :param identifier: the object identifier
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: the metadata about the item, or 'None' if not found or if an error ocurred
+    """
+    # initialize the return variable
+    result: dict[str, Any] | None = None
+
+    # make sure to have a MinIO client
+    curr_client: Minio = client or access(errors=errors,
+                                          logger=logger)
+    # was the MinIO client obtained ?
+    if curr_client:
+        # yes, proceed
+        remotepath: Path = Path(basepath) / identifier
+        try:
+            tags: Tags = curr_client.get_object_tags(bucket_name=bucket,
+                                                     object_name=f"{remotepath}")
+            if tags and len(tags) > 0:
+                result = {}
+                for key, value in tags.items():
+                    result[key] = str_from_hex(value)
+            _s3_log(logger=logger,
+                    stmt=f"Retrieved {remotepath}, bucket {bucket}, tags {result}")
+        except Exception as e:
+            if not hasattr(e, "code") or e.code != "NoSuchKey":
+                _s3_except_msg(errors=errors,
+                               exception=e,
+                               engine="minio",
+                               logger=logger)
+
     return result
 
 
@@ -685,7 +686,7 @@ def _folder_delete(errors: list[str],
     return result
 
 
-def __normalize_tags(tags: dict[str, Any]) -> Tags:
+def __normalize_tags(tags: dict[str, str]) -> Tags:
 
     # initialize return variable
     result: Tags | None
@@ -695,8 +696,9 @@ def __normalize_tags(tags: dict[str, Any]) -> Tags:
         # yes, process them
         result = Tags(for_object=True)
         for key, value in tags.items():
-            # normalize text, by removing all diacritics
-            result[key] = unidecode(value)
+            # normalize key, by removing all diacritics,
+            # and convert 'value' to its hex representation
+            result[unidecode(key)] = str_to_hex(value)
     else:
         result = None
 

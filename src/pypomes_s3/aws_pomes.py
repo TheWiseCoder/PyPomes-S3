@@ -446,12 +446,12 @@ def item_remove(errors: list[str],
     return result
 
 
-def item_tags_retrieve(errors: list[str],
-                       bucket: str,
-                       basepath: str,
-                       identifier: str,
-                       client: BaseClient = None,
-                       logger: Logger = None) -> dict[str, Any]:
+def tags_retrieve(errors: list[str],
+                  bucket: str,
+                  basepath: str,
+                  identifier: str,
+                  client: BaseClient = None,
+                  logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return the metadata information for an object in the *AWS* store.
 

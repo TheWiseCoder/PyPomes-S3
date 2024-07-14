@@ -4,7 +4,7 @@ from .s3_pomes import (
     s3_file_store, s3_file_retrieve,
     s3_object_store, s3_object_retrieve,
     s3_item_exists, s3_item_stat,
-    s3_item_remove, s3_item_tags_retrieve, s3_items_list,
+    s3_item_remove, s3_items_list, s3_tags_retrieve,
 )
 
 __all__ = [
@@ -14,7 +14,7 @@ __all__ = [
     "s3_file_store", "s3_file_retrieve",
     "s3_object_store", "s3_object_retrieve",
     "s3_item_exists", "s3_item_stat",
-    "s3_item_remove", "s3_item_tags_retrieve", "s3_items_list",
+    "s3_item_remove", "s3_items_list", "s3_tags_retrieve",
 ]
 
 from importlib.metadata import version

@@ -284,7 +284,7 @@ def s3_data_retrieve(errors: list[str],
                      bucket: str = None,
                      engine: str = None,
                      client: Any = None,
-                     logger: Logger = None) -> Any:
+                     logger: Logger = None) -> bytes:
     """
     Retrieve a file from the S3 store.
 
@@ -300,7 +300,7 @@ def s3_data_retrieve(errors: list[str],
     :return: the bytes retrieved, or 'None' if an error ocurred
     """
     # initialize the return variable
-    result: Any = None
+    result: bytes | None = None
 
     # initialize the local errors list
     op_errors: list[str] = []
@@ -739,60 +739,6 @@ def s3_item_remove(errors: list[str],
     return result
 
 
-def s3_item_tags_retrieve(errors: list[str],
-                          basepath: str,
-                          identifier: str,
-                          bucket: str = None,
-                          engine: str = None,
-                          client: Any = None,
-                          logger: Logger = None) -> dict:
-    """
-    Retrieve and return the metadata information for an item in the S3 store.
-
-    :param errors: incidental error messages
-    :param basepath: the path specifying the location to retrieve the object from
-    :param identifier: the object identifier
-    :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param engine: the S3 engine to use (uses the default engine, if not provided)
-    :param client: optional S3 client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: the metadata about the item, or 'None' if an error ocurred
-    """
-    # initialize the return variable
-    result: dict | None = None
-
-    # initialize the local errors list
-    op_errors: list[str] = []
-
-    # determine the S3 engine
-    curr_engine: str = _assert_engine(errors=op_errors,
-                                      engine=engine)
-    # make sure to have a bucket name
-    if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
-    if curr_engine == "aws":
-        from . import aws_pomes
-        result = aws_pomes.item_tags_retrieve(errors=op_errors,
-                                              bucket=bucket,
-                                              basepath=basepath,
-                                              identifier=identifier,
-                                              client=client,
-                                              logger=logger)
-    elif curr_engine == "minio":
-        from . import minio_pomes
-        result = minio_pomes.item_tags_retrieve(errors=op_errors,
-                                                bucket=bucket,
-                                                basepath=basepath,
-                                                identifier=identifier,
-                                                client=client,
-                                                logger=logger)
-    # acknowledge eventual local errors
-    errors.extend(op_errors)
-
-    return result
-
-
 def s3_items_list(errors: list[str],
                   basepath: str,
                   recursive: bool = False,
@@ -841,6 +787,60 @@ def s3_items_list(errors: list[str],
                                         recursive=recursive,
                                         client=client,
                                         logger=logger)
+    # acknowledge eventual local errors
+    errors.extend(op_errors)
+
+    return result
+
+
+def s3_tags_retrieve(errors: list[str],
+                     basepath: str,
+                     identifier: str,
+                     bucket: str = None,
+                     engine: str = None,
+                     client: Any = None,
+                     logger: Logger = None) -> dict:
+    """
+    Retrieve and return the metadata information for an item in the S3 store.
+
+    :param errors: incidental error messages
+    :param basepath: the path specifying the location to retrieve the object from
+    :param identifier: the object identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param engine: the S3 engine to use (uses the default engine, if not provided)
+    :param client: optional S3 client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: the metadata about the item, or 'None' if an error ocurred
+    """
+    # initialize the return variable
+    result: dict | None = None
+
+    # initialize the local errors list
+    op_errors: list[str] = []
+
+    # determine the S3 engine
+    curr_engine: str = _assert_engine(errors=op_errors,
+                                      engine=engine)
+    # make sure to have a bucket name
+    if not bucket:
+        bucket = _s3_get_param(engine=curr_engine,
+                               param="bucket-name")
+    if curr_engine == "aws":
+        from . import aws_pomes
+        result = aws_pomes.tags_retrieve(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         client=client,
+                                         logger=logger)
+    elif curr_engine == "minio":
+        from . import minio_pomes
+        result = minio_pomes.tags_retrieve(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           client=client,
+                                           logger=logger)
     # acknowledge eventual local errors
     errors.extend(op_errors)
 
