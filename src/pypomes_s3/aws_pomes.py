@@ -9,7 +9,7 @@ from typing import Any
 from unidecode import unidecode
 
 from .s3_common import (
-    _s3_get_param, _s3_get_params, _s3_except_msg, _s3_log
+    _get_param, _get_params, _except_msg, _log
 )
 
 
@@ -26,7 +26,7 @@ def access(errors: list[str],
     result: BaseClient | None = None
 
     # retrieve the access parameters
-    access_key, secret_key, region_name = _s3_get_params("aws")
+    access_key, secret_key, region_name = _get_params("aws")
 
     try:
         result = Session().client(service_name="s3",
@@ -34,10 +34,10 @@ def access(errors: list[str],
                                   aws_access_key_id=access_key,
                                   aws_secret_access_key=secret_key)
     except Exception as e:
-        _s3_except_msg(errors=errors,
-                       exception=e,
-                       engine="aws",
-                       logger=logger)
+        _except_msg(errors=errors,
+                    exception=e,
+                    engine="aws",
+                    logger=logger)
 
     return result
 
@@ -70,13 +70,13 @@ def startup(errors: list[str],
             if not client.bucket_exists(bucket_name=bucket):
                 client.make_bucket(bucket_name=bucket)
             result = True
-            _s3_log(logger=logger,
-                    stmt=f"Started AWS, bucket={bucket}")
+            _log(logger=logger,
+                 stmt=f"Started AWS, bucket={bucket}")
         except Exception as e:
-            _s3_except_msg(errors=errors,
-                           exception=e,
-                           engine="aws",
-                           logger=logger)
+            _except_msg(errors=errors,
+                        exception=e,
+                        engine="aws",
+                        logger=logger)
     return result
 
 
@@ -131,14 +131,14 @@ def file_store(errors: list[str],
                                     content_type=mimetype,
                                     tags=doc_tags)
             result = True
-            _s3_log(logger=logger,
-                    stmt=(f"Stored {remotepath}, bucket {bucket}, "
+            _log(logger=logger,
+                 stmt=(f"Stored {remotepath}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
         except Exception as e:
-            _s3_except_msg(errors=errors,
-                           exception=e,
-                           engine="aws",
-                           logger=logger)
+            _except_msg(errors=errors,
+                        exception=e,
+                        engine="aws",
+                        logger=logger)
     return result
 
 
@@ -175,14 +175,14 @@ def file_retrieve(errors: list[str],
             result = curr_client.fget_object(bucket_name=bucket,
                                              object_name=f"{remotepath}",
                                              file_path=filepath)
-            _s3_log(logger=logger,
-                    stmt=f"Retrieved {remotepath}, bucket {bucket}")
+            _log(logger=logger,
+                 stmt=f"Retrieved {remotepath}, bucket {bucket}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="aws",
-                               logger=logger)
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="aws",
+                            logger=logger)
     return result
 
 
@@ -216,7 +216,7 @@ def object_store(errors: list[str],
     # proceed, if the AWS client was obtained
     if curr_client:
         # serialize the object into a file
-        temp_folder: Path = _s3_get_param("minio", "temp-folder")
+        temp_folder: Path = _get_param("minio", "temp-folder")
         filepath: Path = temp_folder / f"{uuid.uuid4()}.pickle"
         with filepath.open("wb") as f:
             pickle.dump(obj, f)
@@ -245,8 +245,8 @@ def object_store(errors: list[str],
             storage: str = "Stored "
 
         remotepath: Path = Path(basepath) / identifier
-        _s3_log(logger=logger,
-                stmt=f"{storage} {remotepath}, bucket {bucket}")
+        _log(logger=logger,
+             stmt=f"{storage} {remotepath}, bucket {bucket}")
 
     return result
 
@@ -277,7 +277,7 @@ def object_retrieve(errors: list[str],
     # proceed, if the AWS client was obtained
     if curr_client:
         # retrieve the file containg the serialized object
-        temp_folder: Path = _s3_get_param("minio", "temp-folder")
+        temp_folder: Path = _get_param("minio", "temp-folder")
         filepath: Path = temp_folder / f"{uuid.uuid4()}.pickle"
         stat: Any = file_retrieve(errors=errors,
                                   bucket=bucket,
@@ -296,8 +296,8 @@ def object_retrieve(errors: list[str],
 
         retrieval: str = "Retrieved" if result else "Unable to retrieve"
         remotepath: Path = Path(basepath) / identifier
-        _s3_log(logger=logger,
-                stmt=f"{retrieval} {remotepath}, bucket {bucket}")
+        _log(logger=logger,
+             stmt=f"{retrieval} {remotepath}, bucket {bucket}")
 
     return result
 
@@ -348,8 +348,8 @@ def item_exists(errors: list[str],
 
         remotepath: Path = Path(basepath) / identifier
         existence: str = "exists" if result else "do not exist"
-        _s3_log(logger=logger,
-                stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
+        _log(logger=logger,
+             stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
 
     return result
 
@@ -384,14 +384,14 @@ def item_stat(errors: list[str],
         try:
             result = curr_client.stat_object(bucket_name=bucket,
                                              object_name=f"{remotepath}")
-            _s3_log(logger=logger,
-                    stmt=f"Stat'ed {remotepath}, bucket {bucket}")
+            _log(logger=logger,
+                 stmt=f"Stat'ed {remotepath}, bucket {bucket}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="aws",
-                               logger=logger)
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="aws",
+                            logger=logger)
     return result
 
 
@@ -435,14 +435,14 @@ def item_remove(errors: list[str],
                 curr_client.remove_object(bucket_name=bucket,
                                           object_name=f"{remotepath}")
                 result = True
-                _s3_log(logger=logger,
-                        stmt=f"Deleted {remotepath}, bucket {bucket}")
+                _log(logger=logger,
+                     stmt=f"Deleted {remotepath}, bucket {bucket}")
             except Exception as e:
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
-                    _s3_except_msg(errors=errors,
-                                   exception=e,
-                                   engine="aws",
-                                   logger=logger)
+                    _except_msg(errors=errors,
+                                exception=e,
+                                engine="aws",
+                                logger=logger)
     return result
 
 
@@ -480,14 +480,14 @@ def tags_retrieve(errors: list[str],
                 result = {}
                 for key, value in tags.items():
                     result[key] = value
-            _s3_log(logger=logger,
-                    stmt=f"Retrieved {remotepath}, bucket {bucket}, tags {result}")
+            _log(logger=logger,
+                 stmt=f"Retrieved {remotepath}, bucket {bucket}, tags {result}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _s3_except_msg(errors=errors,
-                               exception=e,
-                               engine="aws",
-                               logger=logger)
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="aws",
+                            logger=logger)
 
     return result
 
@@ -522,13 +522,13 @@ def items_list(errors: list[str],
             result = curr_client.list_objects(bucket_name=bucket,
                                               prefix=basepath,
                                               recursive=recursive)
-            _s3_log(logger=logger,
-                    stmt=f"Listed {basepath}, bucket {bucket}")
+            _log(logger=logger,
+                 stmt=f"Listed {basepath}, bucket {bucket}")
         except Exception as e:
-            _s3_except_msg(errors=errors,
-                           exception=e,
-                           engine="aws",
-                           logger=logger)
+            _except_msg(errors=errors,
+                        exception=e,
+                        engine="aws",
+                        logger=logger)
 
     return result
 
@@ -560,13 +560,13 @@ def _folder_delete(errors: list[str],
             try:
                 client.remove_object(bucket_name=bucket,
                                      object_name=obj.object_name)
-                _s3_log(logger=logger,
-                        stmt=f"Removed folder {basepath}, bucket {bucket}")
+                _log(logger=logger,
+                     stmt=f"Removed folder {basepath}, bucket {bucket}")
             except Exception as e:
                 # SANITY CHECK: in case of concurrent exclusion
                 # ruff: noqa: PERF203
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
-                    _s3_except_msg(errors=errors,
-                                   exception=e,
-                                   engine="aws",
-                                   logger=logger)
+                    _except_msg(errors=errors,
+                                exception=e,
+                                engine="aws",
+                                logger=logger)

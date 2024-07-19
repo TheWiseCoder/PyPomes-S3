@@ -2,15 +2,15 @@ from collections.abc import Iterator
 from logging import Logger
 from pathlib import Path
 from pypomes_http import MIMETYPE_BINARY
-from typing import Any, BinaryIO
+from typing import Any, Literal, BinaryIO
 
 from .s3_common import (
     _S3_ENGINES, _S3_ACCESS_DATA,
-    _assert_engine, _s3_get_param
+    _assert_engine, _get_param
 )
 
 
-def s3_setup(engine: str,
+def s3_setup(engine: Literal["aws", "ecs", "minio"],
              access_key: str,
              access_secret: str,
              bucket_name: str,
@@ -26,13 +26,13 @@ def s3_setup(engine: str,
     *db_client* may be provided for *oracle*, but not for the other engines.
     *db_driver* is required for *sqlserver*, but is not accepted for the other engines.
 
-    :param engine: the S3 engine (one of [aws, minio])
+    :param engine: the S3 engine (one of ['aws', 'ecs', 'minio'])
     :param access_key: the access key for the service
     :param access_secret: the access secret code
     :param bucket_name: the name of the default bucket
     :param temp_folder: path for temporary files
     :param region_name: the name of the region where the engine is located (AWS only)
-    :param endpoint_url: the access URL for the service (MinIO only)
+    :param endpoint_url: the access URL for the service (ECS or MinIO)
     :param secure_access: whether or not to use Transport Security Layer (MinIO only)
     :return: True if the data was accepted, False otherwise
     """
@@ -40,12 +40,12 @@ def s3_setup(engine: str,
     result: bool = False
 
     # are the parameters compliant ?
-    if (engine in ["aws", "minio"] and
+    if (engine in ["aws", "ecs", "minio"] and
         access_key and access_secret and bucket_name and temp_folder and
         not (engine != "aws" and region_name) and
         not (engine == "aws" and not region_name) and
-        not (engine != "minio" and endpoint_url) and
-        not (engine == "minio" and not endpoint_url) and
+        not (engine == "aws" and endpoint_url) and
+        not (engine != "aws" and not endpoint_url) and
         not (engine != "minio" and secure_access is not None) and
         not (engine == "minio" and secure_access is None)):
         _S3_ACCESS_DATA[engine] = {
@@ -56,8 +56,9 @@ def s3_setup(engine: str,
         }
         if engine == "aws":
             _S3_ACCESS_DATA[engine]["region-name"] = region_name
-        elif engine == "minio":
+        else:
             _S3_ACCESS_DATA[engine]["endpoint-url"] = endpoint_url
+        if engine == "minio":
             _S3_ACCESS_DATA[engine]["secure-access"] = secure_access
         if engine not in _S3_ENGINES:
             _S3_ENGINES.append(engine)
@@ -76,6 +77,27 @@ def s3_get_engines() -> list[str]:
     :return: the list of configured engines
     """
     return _S3_ENGINES
+
+
+def s3_get_param(key: Literal["access-key", "secret-key", "bucket-name",
+                              "temp-folder", "endpoint-url", "client", "secure-access"],
+                 engine: str = None) -> str:
+    """
+    Return the connection parameter value for *key*.
+
+    The connection key should be one of *access-key*, *secret-key*, *bucket-name", and *temp-folder*.
+    For *ecs* and *minio* engines, the extra key *endpoint-url* is added to this list.
+    For *aws* and *minio* engines, th extra keys *client* and *secure-access* are added,
+    respectively.
+
+    :param key: the reference parameter
+    :param engine: the reference S3 engine (the default engine, if not provided)
+    :return: the current value of the connection parameter
+    """
+    # determine the S3 engine
+    curr_engine: str = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
+
+    return _get_param(curr_engine, key)
 
 
 def s3_get_params(engine: str = None) -> dict:
@@ -162,51 +184,6 @@ def s3_access(errors: list[str] | None,
     return result
 
 
-def s3_startup(errors: list[str],
-               bucket: str = None,
-               engine: str = None,
-               logger: Logger = None) -> bool:
-    """
-    Prepare the S3 *client* for operations.
-
-    This function should be called just once, at startup,
-    to make sure the interaction with the MinIo service is fully functional.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param engine: the S3 engine to use (uses the default engine, if not provided)
-    :param logger: optional logger
-    :return: True if service is fully functional
-    """
-    # initialize the return variable
-    result: bool = False
-
-    # initialize the local errors list
-    op_errors: list[str] = []
-
-    # determine the S3 engine
-    curr_engine: str = _assert_engine(errors=op_errors,
-                                      engine=engine)
-    # make sure to have a bucket name
-    if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
-    if curr_engine == "aws":
-        from . import aws_pomes
-        result = aws_pomes.startup(errors=op_errors,
-                                   bucket=bucket,
-                                   logger=logger)
-    elif curr_engine == "minio":
-        from . import minio_pomes
-        result = minio_pomes.startup(errors=op_errors,
-                                     bucket=bucket,
-                                     logger=logger)
-    # acknowledge eventual local errors
-    errors.extend(op_errors)
-
-    return result
-
-
 def s3_data_store(errors: list[str],
                   basepath: str,
                   identifier: str,
@@ -245,8 +222,8 @@ def s3_data_store(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
@@ -286,18 +263,18 @@ def s3_data_retrieve(errors: list[str],
                      client: Any = None,
                      logger: Logger = None) -> bytes:
     """
-    Retrieve a file from the S3 store.
+    Retrieve data from the S3 store.
 
     :param errors: incidental error messages
     :param basepath: the path specifying the location to retrieve the data from
-    :param identifier: the file identifier, tipically a file name
+    :param identifier: the data identifier
     :param offset: the start position within the data (in bytes, defaults to 0: data start)
     :param length: the length of the data to retrieve (in bytes, defaults to 0: to data finish)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the bytes retrieved, or 'None' if an error ocurred
+    :return: the bytes retrieved, or 'None' if error or data not found
     """
     # initialize the return variable
     result: bytes | None = None
@@ -310,8 +287,8 @@ def s3_data_retrieve(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_retrieve(errors=op_errors,
@@ -360,7 +337,7 @@ def s3_file_store(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: True if the file was successfully stored, False otherwise
+    :return: 'True' if the file was successfully stored, 'False' otherwise
     """
     # initialize the return variable
     result: bool | None = None
@@ -373,8 +350,8 @@ def s3_file_store(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
@@ -422,7 +399,7 @@ def s3_file_retrieve(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the file retrieved, or 'None' if an error ocurred
+    :return: information about the file retrieved, or 'None' if error or file not found
     """
     # initialize the return variable
     result: Any = None
@@ -435,8 +412,8 @@ def s3_file_retrieve(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_retrieve(errors=op_errors,
@@ -482,7 +459,7 @@ def s3_object_store(errors: list[str],
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: True if the object was successfully stored, False otherwise
+    :return: 'True' if the object was successfully stored, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -495,8 +472,8 @@ def s3_object_store(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.object_store(errors=op_errors,
@@ -540,7 +517,7 @@ def s3_object_retrieve(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the object retrieved
+    :return: the object retrieved, or 'None' if error or object not found
     """
     # initialize the return variable
     result: Any = None
@@ -553,8 +530,8 @@ def s3_object_retrieve(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.object_retrieve(errors=op_errors,
@@ -607,8 +584,8 @@ def s3_item_exists(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.item_exists(errors=op_errors,
@@ -648,7 +625,7 @@ def s3_item_stat(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: metadata and information about the item, or 'None' if an error ocurred
+    :return: metadata and information about the item, or 'None' if error or item not found
     """
     # initialize the return variable
     result: Any | None = None
@@ -661,8 +638,8 @@ def s3_item_stat(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.item_stat(errors=op_errors,
@@ -715,8 +692,8 @@ def s3_item_remove(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.item_remove(errors=op_errors,
@@ -756,7 +733,7 @@ def s3_items_list(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the iterator into the list of items, 'None' if the folder does not exist
+    :return: the iterator into the list of items, or 'None' if error or the folder not found
     """
     # initialize the return variable
     result: Iterator | None = None
@@ -769,8 +746,8 @@ def s3_items_list(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.items_list(errors=op_errors,
@@ -810,7 +787,7 @@ def s3_tags_retrieve(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the metadata about the item, or 'None' if an error ocurred
+    :return: the metadata about the item, or 'None' if error or item not found
     """
     # initialize the return variable
     result: dict | None = None
@@ -823,8 +800,8 @@ def s3_tags_retrieve(errors: list[str],
                                       engine=engine)
     # make sure to have a bucket name
     if not bucket:
-        bucket = _s3_get_param(engine=curr_engine,
-                               param="bucket-name")
+        bucket = _get_param(engine=curr_engine,
+                            param="bucket-name")
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.tags_retrieve(errors=op_errors,

@@ -9,7 +9,7 @@ from typing import Any
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
 # - specifying S3 storage parameters with environment variables can be done in two ways:
 #   1. specify the set
-#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'minio')
+#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'ecs', 'minio')
 #     {APP_PREFIX}_S3_ACCESS_KEY
 #     {APP_PREFIX}_S3_SECRET_KEY
 #     {APP_PREFIX}_S3_BUCKET_NAME
@@ -40,8 +40,8 @@ for engine in _S3_ENGINES:
         _default_setup = False
     else:
         _tag: str = str_get_positional(source=engine,
-                                       list_origin=["aws", "minio"],
-                                       list_dest=["AWS", "MINIO"])
+                                       list_origin=["aws", "ecs", "minio"],
+                                       list_dest=["AWS", "ECS", "MINIO"])
     _s3_data = {
         "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
         "secret-key": env_get_str(f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
@@ -50,8 +50,9 @@ for engine in _S3_ENGINES:
     }
     if engine == "aws":
         _s3_data["client"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
-    elif engine == "minio":
+    else:
         _s3_data["endpoint-url"] = env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL")
+    if engine == "minio":
         _s3_data["secure-access"] = env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS")
     _S3_ACCESS_DATA[engine] = _s3_data
 
@@ -82,8 +83,8 @@ def _assert_engine(errors: list[str],
     return result
 
 
-def _s3_get_param(engine: str,
-                  param: str) -> Any:
+def _get_param(engine: str,
+               param: str) -> Any:
     """
     Return the current value of *param* being used by *engine*.
 
@@ -94,7 +95,7 @@ def _s3_get_param(engine: str,
     return _S3_ACCESS_DATA[engine].get(param)
 
 
-def _s3_get_params(engine: str) -> tuple:
+def _get_params(engine: str) -> tuple:
     """
     Return the current parameters being used for *engine*.
 
@@ -114,6 +115,9 @@ def _s3_get_params(engine: str) -> tuple:
     if engine == "aws":
         region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
         result = (access_key, secret_key, region_name)
+    elif engine == "ecs":
+        endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
+        result = (access_key, secret_key, endpoint_url)
     elif engine == "minio":
         endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
         secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
@@ -122,10 +126,10 @@ def _s3_get_params(engine: str) -> tuple:
     return result
 
 
-def _s3_except_msg(errors: list[str],
-                   exception: Exception,
-                   engine: str,
-                   logger: Logger) -> None:
+def _except_msg(errors: list[str],
+                exception: Exception,
+                engine: str,
+                logger: Logger) -> None:
     """
     Format and log the error message corresponding to the exception raised while accessing the S3 store.
 
@@ -144,11 +148,11 @@ def _s3_except_msg(errors: list[str],
         logger.error(err_msg)
 
 
-def _s3_log(logger: Logger,
-            err_msg: str = None,
-            level: int = DEBUG,
-            errors: list[str] = None,
-            stmt: str = None) -> None:
+def _log(logger: Logger,
+         err_msg: str = None,
+         level: int = DEBUG,
+         errors: list[str] = None,
+         stmt: str = None) -> None:
     """
     Log *err_msg* and add it to *errors*, or else log *stmt*, whichever is applicable.
 
