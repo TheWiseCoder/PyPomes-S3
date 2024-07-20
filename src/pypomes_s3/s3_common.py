@@ -10,12 +10,12 @@ from typing import Any
 # - specifying S3 storage parameters with environment variables can be done in two ways:
 #   1. specify the set
 #     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'ecs', 'minio')
+#     {APP_PREFIX}_S3_ENDPOINT_URL
 #     {APP_PREFIX}_S3_ACCESS_KEY
 #     {APP_PREFIX}_S3_SECRET_KEY
 #     {APP_PREFIX}_S3_BUCKET_NAME
 #     {APP_PREFIX}_S3_TEMP_FOLDER
 #     {APP_PREFIX}_S3_REGION_NAME (for aws)
-#     {APP_PREFIX}_S3_ENDPOINT_URL (for ecs and minio)
 #     {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
 #   2. alternatively, specify a comma-separated list of servers in
 #     {APP_PREFIX}_S3_ENGINES
@@ -43,16 +43,15 @@ for engine in _S3_ENGINES:
                                        list_origin=["aws", "ecs", "minio"],
                                        list_dest=["AWS", "ECS", "MINIO"])
     _s3_data = {
-        "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        "secret-key": env_get_str(f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
+        "endpoint-url": env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
         "bucket-name": env_get_str(f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
-        "temp-folder": Path(env_get_str(f"{APP_PREFIX}_{_tag}_TEMP_FOLDER"))
+        "temp-folder": Path(env_get_str(f"{APP_PREFIX}_{_tag}_TEMP_FOLDER")),
+        "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
+        "secret-key": env_get_str(f"{APP_PREFIX}_{_tag}_SECRET_KEY")
     }
     if engine == "aws":
         _s3_data["region-name"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
-    else:
-        _s3_data["endpoint-url"] = env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL")
-    if engine == "minio":
+    elif engine == "minio":
         _s3_data["secure-access"] = env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS")
     _S3_ACCESS_DATA[engine] = _s3_data
 
@@ -100,28 +99,32 @@ def _get_params(engine: str) -> tuple:
     Return the current parameters being used for *engine*.
 
     The parameters are returned as a *tuple*, with the elements
-    *access-key*, *secret-key*, *bucket-name*, *temp-folder*.
-    For *aws* engines, the extra element *region-name* is returned.
-    for *minio* engines, the elements *endpoint-url* and *secure-access are returned.
+    *endpoint-url*, *bucket-name*, *temp-folder*, *access-key*, and *secret-key*.
+    For *aws* and *minio* engines, the extra elements *region-name* and
+    *secure-access* are returned, respectively.
     The meaning of some parameters may vary between different S3 engines.
 
     :param engine: the reference database engine
     :return: the current parameters for the engine
     """
+    endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
+    bucket_name: str = _S3_ACCESS_DATA[engine].get("bucket-name")
+    temp_folder: str = _S3_ACCESS_DATA[engine].get("temp-folder")
     access_key: str = _S3_ACCESS_DATA[engine].get("access-key")
     secret_key: str = _S3_ACCESS_DATA[engine].get("secret-key")
 
     result: tuple | None = None
     if engine == "aws":
         region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
-        result = (access_key, secret_key, region_name)
+        result = (endpoint_url, bucket_name, temp_folder,
+                  access_key, secret_key, region_name)
     elif engine == "ecs":
-        endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
-        result = (access_key, secret_key, endpoint_url)
+        result = (endpoint_url, bucket_name, temp_folder,
+                  access_key, secret_key)
     elif engine == "minio":
-        endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
         secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
-        result = (access_key, secret_key, endpoint_url, secure_access)
+        result = (endpoint_url, bucket_name, temp_folder,
+                  access_key, secret_key, secure_access)
 
     return result
 
@@ -139,8 +142,7 @@ def _except_msg(errors: list[str],
     :param engine: the reference database engine
     :return: the formatted error message
     """
-    endpoint: str = _S3_ACCESS_DATA[engine].get("region-name") if engine == "aws" else \
-                    _S3_ACCESS_DATA[engine].get("endpoint-url")
+    endpoint: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
     err_msg: str = f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
     if isinstance(errors, list):
         errors.append(err_msg)

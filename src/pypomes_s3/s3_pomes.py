@@ -11,29 +11,28 @@ from .s3_common import (
 
 
 def s3_setup(engine: Literal["aws", "ecs", "minio"],
+             endpoint_url: str,
              access_key: str,
              secret_key: str,
              bucket_name: str,
              temp_folder: str | Path,
              region_name: str = None,
-             endpoint_url: str = None,
              secure_access: bool = None) -> bool:
     """
     Establish the provided parameters for access to *engine*.
 
     The meaning of some parameters may vary between different S3 engines.
     All parameters, are required, with these exceptions:
-        - *secure_access* may be provided for *minio*, only
         - *region-name* is required for *aws*, only
-        - *endpoint-url* are required for *ecs* and *minio*, only
+        - *secure_access* may be provided for *minio*, only
 
     :param engine: the S3 engine (one of ['aws', 'ecs', 'minio'])
+    :param endpoint_url: the access URL for the service
     :param access_key: the access key for the service
     :param secret_key: the access secret code
     :param bucket_name: the name of the default bucket
     :param temp_folder: path for temporary files
     :param region_name: the name of the region where the engine is located (AWS only)
-    :param endpoint_url: the access URL for the service (ECS or MinIO only)
     :param secure_access: whether or not to use Transport Security Layer (MinIO only)
     :return: 'True' if the data was accepted, 'False' otherwise
     """
@@ -42,24 +41,22 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
 
     # are the parameters compliant ?
     if (engine in ["aws", "ecs", "minio"] and
-        access_key and secret_key and bucket_name and temp_folder and
+        endpoint_url and bucket_name and temp_folder and
+        access_key and secret_key and bucket_name and
         not (engine != "aws" and region_name) and
         not (engine == "aws" and not region_name) and
-        not (engine == "aws" and endpoint_url) and
-        not (engine != "aws" and not endpoint_url) and
-        not (engine != "minio" and secure_access is not None) and
-        not (engine == "minio" and secure_access is None)):
+        not (engine != "minio" and secure_access) and
+        not (engine == "minio" and not secure_access)):
         _S3_ACCESS_DATA[engine] = {
-            "access-key": access_key,
-            "secret-key": secret_key,
+            "endpoint-url": endpoint_url,
             "bucket-name": bucket_name,
-            "temp-folder": Path(temp_folder)
+            "temp-folder": Path(temp_folder),
+            "access-key": access_key,
+            "secret-key": secret_key
         }
         if engine == "aws":
             _S3_ACCESS_DATA[engine]["region-name"] = region_name
-        else:
-            _S3_ACCESS_DATA[engine]["endpoint-url"] = endpoint_url
-        if engine == "minio":
+        elif engine == "minio":
             _S3_ACCESS_DATA[engine]["secure-access"] = secure_access
         if engine not in _S3_ENGINES:
             _S3_ENGINES.append(engine)
@@ -79,8 +76,8 @@ def s3_get_engines() -> list[str]:
     return _S3_ENGINES
 
 
-def s3_get_param(key: Literal["access-key", "secret-key", "bucket-name",
-                              "temp-folder", "endpoint-url", "region-name", "secure-access"],
+def s3_get_param(key: Literal["endpoint-url", "bucket-name", "temp-folder",
+                              "access-key", "secret-key", "region-name", "secure-access"],
                  engine: str = None) -> str:
     """
     Return the connection parameter value for *key*.
@@ -143,6 +140,52 @@ def s3_assert_access(errors: list[str] | None,
                                     logger=logger)
         result = client is not None
 
+    # acknowledge local errors
+    errors.extend(op_errors)
+
+    return result
+
+
+def s3_startup(errors: list[str] | None,
+               engine: str = None,
+               bucket: str = None,
+               logger: Logger = None) -> bool:
+    """
+    Prepare the S3 client for operations.
+
+    This function should be called just once, at startup,
+    to make sure the interaction with the S3 service is fully functional.
+
+    :param errors: incidental error messages
+    :param engine: the S3 engine to use (uses the default engine, if not provided)
+    :param bucket: the bucket to use
+    :param logger: optional logger
+    :return: True if service is fully functional
+    """
+    # initialize the return variable
+    result: bool = False
+
+    # initialize the local errors list
+    op_errors: list[str] = []
+
+    # determine the S3 engine
+    curr_engine: str = _assert_engine(errors=op_errors,
+                                      engine=engine)
+    # make sure to have a bucket
+    bucket = bucket or _get_param(engine=curr_engine,
+                                  param="bucket-name")
+    if curr_engine == "aws":
+        from . import aws_pomes
+        result = aws_pomes.startup(errors=op_errors,
+                                   bucket=bucket,
+                                   logger=logger)
+    if curr_engine == "ecs":
+        pass
+    elif curr_engine == "minio":
+        from . import minio_pomes
+        result = minio_pomes.startup(errors=op_errors,
+                                     bucket=bucket,
+                                     logger=logger)
     # acknowledge local errors
     errors.extend(op_errors)
 

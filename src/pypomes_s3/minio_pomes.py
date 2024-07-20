@@ -31,14 +31,15 @@ def get_client(errors: list[str],
     result: Minio | None = None
 
     # retrieve the access parameters
-    access_key, secret_key, endpoint, secure = _get_params("minio")
+    (endpoint_url, bucket_name, temp_folder,
+     access_key, secret_key, secure_access) = _get_params("minio")
 
     # obtain the MinIO client
     try:
         result = Minio(access_key=access_key,
                        secret_key=secret_key,
-                       endpoint=endpoint,
-                       secure=secure)
+                       endpoint=endpoint_url,
+                       secure=secure_access)
         _log(logger=logger,
              stmt="Minio client created")
 
@@ -70,8 +71,7 @@ def startup(errors: list[str],
     # obtain a MinIO client
     client: Minio = get_client(errors=errors,
                                logger=logger)
-
-    # was the MinIO client obtained ?
+    # was it obtained ?
     if client:
         # yes, proceed
         try:

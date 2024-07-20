@@ -26,7 +26,8 @@ def get_client(errors: list[str],
     result: BaseClient | None = None
 
     # retrieve the access parameters
-    access_key, secret_key, region_name = _get_params("aws")
+    (endpoint_url, bucket_name, temp_folder,
+     access_key, secret_key, region_name) = _get_params("aws")
 
     try:
         result = Session().client(service_name="s3",
