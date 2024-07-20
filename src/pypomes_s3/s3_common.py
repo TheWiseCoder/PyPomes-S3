@@ -15,12 +15,12 @@ from typing import Any
 #     {APP_PREFIX}_S3_BUCKET_NAME
 #     {APP_PREFIX}_S3_TEMP_FOLDER
 #     {APP_PREFIX}_S3_REGION_NAME (for aws)
-#     {APP_PREFIX}_S3_ENDPOINT_URL (for minio)
+#     {APP_PREFIX}_S3_ENDPOINT_URL (for ecs and minio)
 #     {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
 #   2. alternatively, specify a comma-separated list of servers in
 #     {APP_PREFIX}_S3_ENGINES
 #     and, for each engine, specify the set above, replacing 'S3' with
-#     'AWS' and 'MINIO', respectively, for the engines listed
+#     'AWS', 'ECS', and 'MINIO', respectively, for the engines listed
 
 _S3_ACCESS_DATA: dict = {}
 _S3_ENGINES: list[str] = []
@@ -49,7 +49,7 @@ for engine in _S3_ENGINES:
         "temp-folder": Path(env_get_str(f"{APP_PREFIX}_{_tag}_TEMP_FOLDER"))
     }
     if engine == "aws":
-        _s3_data["client"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
+        _s3_data["region-name"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
     else:
         _s3_data["endpoint-url"] = env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL")
     if engine == "minio":

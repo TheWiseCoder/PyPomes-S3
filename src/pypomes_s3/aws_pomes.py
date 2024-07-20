@@ -13,8 +13,8 @@ from .s3_common import (
 )
 
 
-def access(errors: list[str],
-           logger: Logger = None) -> BaseClient:
+def get_client(errors: list[str],
+               logger: Logger = None) -> BaseClient:
     """
     Obtain and return a *AWS* client object.
 
@@ -60,8 +60,8 @@ def startup(errors: list[str],
     result: bool = False
 
     # obtain a AWS client
-    client: BaseClient = access(errors=errors,
-                                logger=logger)
+    client: BaseClient = get_client(errors=errors,
+                                    logger=logger)
 
     # was the AWS client obtained ?
     if client:
@@ -107,8 +107,8 @@ def file_store(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -165,8 +165,8 @@ def file_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -211,8 +211,8 @@ def object_store(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # serialize the object into a file
@@ -272,8 +272,8 @@ def object_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # retrieve the file containg the serialized object
@@ -323,8 +323,8 @@ def item_exists(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # proceed, if the AWS client eas obtained
     if curr_client:
         # was the identifier provided ?
@@ -375,8 +375,8 @@ def item_stat(errors: list[str],
     result: dict | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -416,8 +416,8 @@ def item_remove(errors: list[str],
     result: bool = False
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # proceed, if the AWS client was obtained
     if curr_client:
         # was the identifier provided ?
@@ -467,8 +467,8 @@ def tags_retrieve(errors: list[str],
     result: dict[str, Any] | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed
@@ -513,8 +513,8 @@ def items_list(errors: list[str],
     result: Iterator | None = None
 
     # make sure to have a AWS client
-    curr_client: BaseClient = client or access(errors=errors,
-                                               logger=logger)
+    curr_client: BaseClient = client or get_client(errors=errors,
+                                                   logger=logger)
     # was the AWS client obtained ?
     if curr_client:
         # yes, proceed

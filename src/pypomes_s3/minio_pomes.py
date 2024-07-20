@@ -18,8 +18,8 @@ from .s3_common import (
 )
 
 
-def access(errors: list[str],
-           logger: Logger = None) -> Minio:
+def get_client(errors: list[str],
+               logger: Logger = None) -> Minio:
     """
     Obtain and return a *MinIO* client object.
 
@@ -68,8 +68,8 @@ def startup(errors: list[str],
     result: bool = False
 
     # obtain a MinIO client
-    client: Minio = access(errors=errors,
-                           logger=logger)
+    client: Minio = get_client(errors=errors,
+                               logger=logger)
 
     # was the MinIO client obtained ?
     if client:
@@ -117,8 +117,8 @@ def data_store(errors: list[str],
     result: bool = False
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -176,8 +176,8 @@ def data_retrieve(errors: list[str],
     result: bytes | None = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -228,8 +228,8 @@ def file_store(errors: list[str],
     result: bool = False
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -277,8 +277,8 @@ def file_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -323,8 +323,8 @@ def object_store(errors: list[str],
     result: bool = False
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # proceed, if the MinIO client was obtained
     if curr_client:
         # serialize the object into a file
@@ -383,8 +383,8 @@ def object_retrieve(errors: list[str],
     result: Any = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # proceed, if the MinIO client was obtained
     if curr_client:
         # retrieve the file containg the serialized object
@@ -433,8 +433,8 @@ def item_exists(errors: list[str],
     result: bool = False
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # proceed, if the MinIO client eas obtained
     if curr_client:
         # was the identifier provided ?
@@ -486,8 +486,8 @@ def item_stat(errors: list[str],
     result: MinioObject | None = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -529,8 +529,8 @@ def item_remove(errors: list[str],
     result: bool = False
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # proceed, if the MinIO client was obtained
     if curr_client:
         # was the identifier provided ?
@@ -580,8 +580,8 @@ def items_list(errors: list[str],
     result: Iterator | None = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
@@ -620,8 +620,8 @@ def tags_retrieve(errors: list[str],
     result: dict[str, Any] | None = None
 
     # make sure to have a MinIO client
-    curr_client: Minio = client or access(errors=errors,
-                                          logger=logger)
+    curr_client: Minio = client or get_client(errors=errors,
+                                              logger=logger)
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
