@@ -45,8 +45,8 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
         access_key and secret_key and bucket_name and
         not (engine != "aws" and region_name) and
         not (engine == "aws" and not region_name) and
-        not (engine != "minio" and secure_access) and
-        not (engine == "minio" and not secure_access)):
+        not (engine != "minio" and secure_access is not None) and
+        not (engine == "minio" and secure_access is None)):
         _S3_ACCESS_DATA[engine] = {
             "endpoint-url": endpoint_url,
             "bucket-name": bucket_name,
