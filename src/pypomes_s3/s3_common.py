@@ -43,11 +43,12 @@ for engine in _S3_ENGINES:
                                        list_origin=["aws", "ecs", "minio"],
                                        list_dest=["AWS", "ECS", "MINIO"])
     _s3_data = {
-        "endpoint-url": env_get_str(f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
-        "bucket-name": env_get_str(f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
-        "temp-folder": Path(env_get_str(f"{APP_PREFIX}_{_tag}_TEMP_FOLDER")),
-        "access-key":  env_get_str(f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        "secret-key": env_get_str(f"{APP_PREFIX}_{_tag}_SECRET_KEY")
+        "endpoint-url": env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
+        "bucket-name": env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
+        "access-key":  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
+        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
+        "temp-folder": Path(env_get_str(key=f"{APP_PREFIX}_{_tag}_TEMP_FOLDER",
+                                        def_value="/usr/tmp"))
     }
     if engine == "aws":
         _s3_data["region-name"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")

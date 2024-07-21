@@ -83,7 +83,7 @@ def startup(errors: list[str],
 
 def file_store(errors: list[str],
                bucket: str,
-               basepath: str,
+               basepath: str | Path,
                identifier: str,
                filepath: Path | str,
                mimetype: str,
@@ -145,7 +145,7 @@ def file_store(errors: list[str],
 
 def file_retrieve(errors: list[str],
                   bucket: str,
-                  basepath: str,
+                  basepath: str | Path,
                   identifier: str,
                   filepath: Path | str,
                   client: BaseClient = None,
@@ -189,7 +189,7 @@ def file_retrieve(errors: list[str],
 
 def object_store(errors: list[str],
                  bucket: str,
-                 basepath: str,
+                 basepath: str | Path,
                  identifier: str,
                  obj: Any,
                  tags: dict[str, Any] = None,
@@ -254,7 +254,7 @@ def object_store(errors: list[str],
 
 def object_retrieve(errors: list[str],
                     bucket: str,
-                    basepath: str,
+                    basepath: str | Path,
                     identifier: str,
                     client: BaseClient = None,
                     logger: Logger = None) -> Any:
@@ -305,7 +305,7 @@ def object_retrieve(errors: list[str],
 
 def item_exists(errors: list[str],
                 bucket: str,
-                basepath: str,
+                basepath: str | Path,
                 identifier: str | None,
                 client: BaseClient = None,
                 logger: Logger = None) -> bool:
@@ -357,7 +357,7 @@ def item_exists(errors: list[str],
 
 def item_stat(errors: list[str],
               bucket: str,
-              basepath: str,
+              basepath: str | Path,
               identifier: str,
               client: BaseClient = None,
               logger: Logger = None) -> dict:
@@ -398,7 +398,7 @@ def item_stat(errors: list[str],
 
 def item_remove(errors: list[str],
                 bucket: str,
-                basepath: str,
+                basepath: str | Path,
                 identifier: str = None,
                 client: BaseClient = None,
                 logger: Logger = None) -> bool:
@@ -449,7 +449,7 @@ def item_remove(errors: list[str],
 
 def tags_retrieve(errors: list[str],
                   bucket: str,
-                  basepath: str,
+                  basepath: str | Path,
                   identifier: str,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, Any]:
@@ -495,7 +495,7 @@ def tags_retrieve(errors: list[str],
 
 def items_list(errors: list[str],
                bucket: str,
-               basepath: str,
+               basepath: str | Path,
                recursive: bool = False,
                client: BaseClient = None,
                logger: Logger = None) -> Iterator:
@@ -536,7 +536,7 @@ def items_list(errors: list[str],
 
 def _folder_delete(errors: list[str],
                    bucket: str,
-                   basepath: str,
+                   basepath: str | Path,
                    client: BaseClient,
                    logger: Logger = None) -> None:
     """

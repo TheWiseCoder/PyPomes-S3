@@ -12,10 +12,10 @@ from .s3_common import (
 
 def s3_setup(engine: Literal["aws", "ecs", "minio"],
              endpoint_url: str,
+             bucket_name: str,
              access_key: str,
              secret_key: str,
-             bucket_name: str,
-             temp_folder: str | Path,
+             temp_folder: str | Path = "/tmp",
              region_name: str = None,
              secure_access: bool = None) -> bool:
     """
@@ -28,9 +28,9 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
 
     :param engine: the S3 engine (one of ['aws', 'ecs', 'minio'])
     :param endpoint_url: the access URL for the service
+    :param bucket_name: the name of the default bucket
     :param access_key: the access key for the service
     :param secret_key: the access secret code
-    :param bucket_name: the name of the default bucket
     :param temp_folder: path for temporary files
     :param region_name: the name of the region where the engine is located (AWS only)
     :param secure_access: whether or not to use Transport Security Layer (MinIO only)
@@ -97,7 +97,7 @@ def s3_get_param(key: Literal["endpoint-url", "bucket-name", "temp-folder",
     return _get_param(curr_engine, key)
 
 
-def s3_get_params(engine: str = None) -> dict:
+def s3_get_params(engine: str = None) -> dict[str, Any]:
     """
     Return the access parameters as a *dict*.
 
@@ -231,7 +231,7 @@ def s3_get_client(errors: list[str] | None,
 
 
 def s3_data_store(errors: list[str],
-                  basepath: str,
+                  basepath: str | Path,
                   identifier: str,
                   data: bytes | str | BinaryIO,
                   length: int = -1,
@@ -299,7 +299,7 @@ def s3_data_store(errors: list[str],
 
 
 def s3_data_retrieve(errors: list[str],
-                     basepath: str,
+                     basepath: str | Path,
                      identifier: str,
                      offset: int = 0,
                      length: int = 0,
@@ -359,7 +359,7 @@ def s3_data_retrieve(errors: list[str],
 
 
 def s3_file_store(errors: list[str],
-                  basepath: str,
+                  basepath: str | Path,
                   identifier: str,
                   filepath: Path | str,
                   mimetype: str,
@@ -424,7 +424,7 @@ def s3_file_store(errors: list[str],
 
 
 def s3_file_retrieve(errors: list[str],
-                     basepath: str,
+                     basepath: str | Path,
                      identifier: str,
                      filepath: Path | str,
                      bucket: str = None,
@@ -481,7 +481,7 @@ def s3_file_retrieve(errors: list[str],
 
 
 def s3_object_store(errors: list[str],
-                    basepath: str,
+                    basepath: str | Path,
                     identifier: str,
                     obj: Any,
                     tags: dict = None,
@@ -542,7 +542,7 @@ def s3_object_store(errors: list[str],
 
 
 def s3_object_retrieve(errors: list[str],
-                       basepath: str,
+                       basepath: str | Path,
                        identifier: str,
                        bucket: str = None,
                        engine: str = None,
@@ -595,7 +595,7 @@ def s3_object_retrieve(errors: list[str],
 
 
 def s3_item_exists(errors: list[str],
-                   basepath: str,
+                   basepath: str | Path,
                    identifier: str | None,
                    bucket: str = None,
                    engine: str = None,
@@ -648,7 +648,7 @@ def s3_item_exists(errors: list[str],
 
 
 def s3_item_stat(errors: list[str],
-                 basepath: str,
+                 basepath: str | Path,
                  identifier: str,
                  bucket: str = None,
                  engine: str = None,
@@ -701,7 +701,7 @@ def s3_item_stat(errors: list[str],
 
 
 def s3_item_remove(errors: list[str],
-                   basepath: str,
+                   basepath: str | Path,
                    identifier: str = None,
                    bucket: str = None,
                    engine: str = None,
@@ -754,7 +754,7 @@ def s3_item_remove(errors: list[str],
 
 
 def s3_items_list(errors: list[str],
-                  basepath: str,
+                  basepath: str | Path,
                   recursive: bool = False,
                   bucket: str = None,
                   engine: str = None,
@@ -807,7 +807,7 @@ def s3_items_list(errors: list[str],
 
 
 def s3_tags_retrieve(errors: list[str],
-                     basepath: str,
+                     basepath: str | Path,
                      identifier: str,
                      bucket: str = None,
                      engine: str = None,
