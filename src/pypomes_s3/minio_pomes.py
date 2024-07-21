@@ -123,6 +123,7 @@ def data_store(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
+        obj_name: str = remote_path.absolute().as_posix()
 
         # store the data
         bin_data: BinaryIO
@@ -134,14 +135,14 @@ def data_store(errors: list[str],
             bin_data.seek(0)
         try:
             curr_client.put_object(bucket_name=bucket,
-                                   object_name=str(remote_path),
+                                   object_name=obj_name,
                                    data=bin_data,
                                    length=length,
                                    content_type=mimetype,
                                    tags=__normalize_tags(tags))
             result = True
             _log(logger=logger,
-                 stmt=(f"Stored {remote_path}, bucket {bucket}, "
+                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
         except Exception as e:
             _except_msg(errors=errors,
@@ -182,16 +183,17 @@ def data_retrieve(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
+        obj_name: str = remote_path.absolute().as_posix()
 
         # retrieve the data
         try:
             response: HTTPResponse = curr_client.get_object(bucket_name=bucket,
-                                                            object_name=str(remote_path),
+                                                            object_name=obj_name,
                                                             offset=offset,
                                                             length=length)
             result = response.data
             _log(logger=logger,
-                 stmt=f"Retrieved {remote_path}, bucket {bucket}")
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -234,17 +236,18 @@ def file_store(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
+        obj_name: str = remote_path.absolute().as_posix()
 
         # store the file
         try:
             curr_client.fput_object(bucket_name=bucket,
-                                    object_name=str(remote_path),
+                                    object_name=obj_name,
                                     file_path=filepath,
                                     content_type=mimetype,
                                     tags=__normalize_tags(tags))
             result = True
             _log(logger=logger,
-                 stmt=(f"Stored {remote_path}, bucket {bucket}, "
+                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
         except Exception as e:
             _except_msg(errors=errors,
