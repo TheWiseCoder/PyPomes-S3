@@ -73,7 +73,8 @@ def s3_get_engines() -> list[str]:
 
     :return: the list of configured engines
     """
-    return _S3_ENGINES
+    # SANITY-CHECK: return a cloned 'list'
+    return _S3_ENGINES.copy()
 
 
 def s3_get_param(key: Literal["endpoint-url", "bucket-name", "temp-folder",
@@ -111,7 +112,9 @@ def s3_get_params(engine: str = None) -> dict[str, Any]:
     :return: the current connection parameters for the engine
     """
     curr_engine: str = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
-    return _S3_ACCESS_DATA.get(engine or curr_engine)
+
+    # SANITY-CHECK: return a cloned 'dict'
+    return dict(_S3_ACCESS_DATA.get(curr_engine))
 
 
 def s3_assert_access(errors: list[str] | None,
