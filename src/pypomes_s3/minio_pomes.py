@@ -123,7 +123,7 @@ def data_store(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.absolute().as_posix()
+        obj_name: str = remote_path.as_posix()
 
         # store the data
         bin_data: BinaryIO
@@ -183,7 +183,7 @@ def data_retrieve(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.absolute().as_posix()
+        obj_name: str = remote_path.as_posix()
 
         # retrieve the data
         try:
@@ -236,7 +236,7 @@ def file_store(errors: list[str],
     if curr_client:
         # yes, proceed
         remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.absolute().as_posix()
+        obj_name: str = remote_path.as_posix()
 
         # store the file
         try:
