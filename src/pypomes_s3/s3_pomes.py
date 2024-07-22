@@ -15,7 +15,6 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
              bucket_name: str,
              access_key: str,
              secret_key: str,
-             temp_folder: str | Path = "/tmp",
              region_name: str = None,
              secure_access: bool = None) -> bool:
     """
@@ -23,7 +22,7 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
 
     The meaning of some parameters may vary between different S3 engines.
     All parameters, are required, with these exceptions:
-        - *region-name* is required for *aws*, only
+        - *region_name* is required for *aws*, only
         - *secure_access* may be provided for *minio*, only
 
     :param engine: the S3 engine (one of ['aws', 'ecs', 'minio'])
@@ -31,7 +30,6 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
     :param bucket_name: the name of the default bucket
     :param access_key: the access key for the service
     :param secret_key: the access secret code
-    :param temp_folder: path for temporary files
     :param region_name: the name of the region where the engine is located (AWS only)
     :param secure_access: whether or not to use Transport Security Layer (MinIO only)
     :return: 'True' if the data was accepted, 'False' otherwise
@@ -41,8 +39,7 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
 
     # are the parameters compliant ?
     if (engine in ["aws", "ecs", "minio"] and
-        endpoint_url and bucket_name and temp_folder and
-        access_key and secret_key and bucket_name and
+        endpoint_url and bucket_name and access_key and secret_key and
         not (engine != "aws" and region_name) and
         not (engine == "aws" and not region_name) and
         not (engine != "minio" and secure_access is not None) and
@@ -50,7 +47,6 @@ def s3_setup(engine: Literal["aws", "ecs", "minio"],
         _S3_ACCESS_DATA[engine] = {
             "endpoint-url": endpoint_url,
             "bucket-name": bucket_name,
-            "temp-folder": Path(temp_folder),
             "access-key": access_key,
             "secret-key": secret_key
         }
@@ -77,15 +73,14 @@ def s3_get_engines() -> list[str]:
     return _S3_ENGINES.copy()
 
 
-def s3_get_param(key: Literal["endpoint-url", "bucket-name", "temp-folder",
+def s3_get_param(key: Literal["endpoint-url", "bucket-name",
                               "access-key", "secret-key", "region-name", "secure-access"],
                  engine: str = None) -> str:
     """
     Return the connection parameter value for *key*.
 
-    The connection key should be one of *access-key*, *secret-key*, *bucket-name", and *temp-folder*.
-    For *ecs* and *minio* engines, the extra key *endpoint-url* is added to this list.
-    For *aws* and *minio* engines, th extra keys *region-name* and *secure-access* are added,
+    The connection key should be one of *endpoint-url*, *bucket-name", *access-key*, and *secret-key*.
+    For *aws* and *minio* engines, the extra keys *region-name* and *secure-access* are added to this list,
     respectively.
 
     :param key: the reference parameter
@@ -102,10 +97,8 @@ def s3_get_params(engine: str = None) -> dict[str, Any]:
     """
     Return the access parameters as a *dict*.
 
-    The returned *dict* contains the keys *access-key*, *bucket-name*, and *temp-folder*.
-     For *aws* engines, the returned *dict* contains the extra key *region-name*.
-     For *ecs* engines, the returned *dict* contains the extra key *endpoint-url*.
-     For *minio* engines, the returned *dict* contain the extra keys *endpoint-url* and *secure-access*.
+    The returned *dict* contains the keys *endpoint-url*, *bucket-name*, and *access-key*,
+    and the extra keys *region-name* and *secure-access*, for *aws* and *minio* engines, respectively.
     The meaning of these parameters may vary between different S3 engines.
 
     :param engine: the database engine
@@ -163,7 +156,7 @@ def s3_startup(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param bucket: the bucket to use
     :param logger: optional logger
-    :return: True if service is fully functional
+    :return: 'True' if service is fully functional
     """
     # initialize the return variable
     result: bool = False
@@ -249,11 +242,11 @@ def s3_data_store(errors: list[str],
 
     :param errors: incidental error messages
     :param basepath: the path specifying the location to store the data at
-    :param identifier: the file identifier, tipically a file name
+    :param identifier: the data identifier
     :param data: the data to store
     :param length: the length of the data (defaults to -1: unknown)
     :param mimetype: the data mimetype
-    :param tags: optional metadata describing the file
+    :param tags: optional metadata describing the data
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -387,7 +380,7 @@ def s3_file_store(errors: list[str],
     :return: 'True' if the file was successfully stored, 'False' otherwise
     """
     # initialize the return variable
-    result: bool | None = None
+    result: bool = False
 
     # initialize the local errors list
     op_errors: list[str] = []
@@ -606,10 +599,12 @@ def s3_item_exists(errors: list[str],
                    logger: Logger = None) -> bool:
     """
     Determine if a given item exists in the S3 store.
+    
+    The item might be unspecified data, a file, or an object.
 
     :param errors: incidental error messages
-    :param basepath: the path specifying where to locate the object
-    :param identifier: optional object identifier
+    :param basepath: the path specifying where to locate the item
+    :param identifier: optional item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -659,10 +654,12 @@ def s3_item_stat(errors: list[str],
                  logger: Logger = None) -> Any:
     """
     Retrieve and return the information about an item in the S3 store.
+    
+    The item might be unspecified data, a file, or an object.
 
     :param errors: incidental error messages
-    :param basepath: the path specifying where to locate the object
-    :param identifier: the object identifier
+    :param basepath: the path specifying where to locate the item
+    :param identifier: the item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -714,8 +711,8 @@ def s3_item_remove(errors: list[str],
     Remove an item from the S3 store.
 
     :param errors: incidental error messages
-    :param basepath: the path specifying the location to retrieve the object from
-    :param identifier: optional object identifier
+    :param basepath: the path specifying the location to retrieve the item from
+    :param identifier: optional item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -773,7 +770,7 @@ def s3_items_list(errors: list[str],
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the iterator into the list of items, or 'None' if error or the folder not found
+    :return: the iterator into the list of items, or 'None' if error or the path not found
     """
     # initialize the return variable
     result: Iterator | None = None
@@ -820,7 +817,7 @@ def s3_tags_retrieve(errors: list[str],
     Retrieve and return the metadata information for an item in the S3 store.
 
     :param errors: incidental error messages
-    :param basepath: the path specifying the location to retrieve the object from
+    :param basepath: the path specifying the location to retrieve the item from
     :param identifier: the object identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)

@@ -1,5 +1,4 @@
 from logging import DEBUG, Logger
-from pathlib import Path
 from pypomes_core import (
     APP_PREFIX,
     env_get_bool, env_get_str, str_sanitize, str_get_positional
@@ -11,10 +10,9 @@ from typing import Any
 #   1. specify the set
 #     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'ecs', 'minio')
 #     {APP_PREFIX}_S3_ENDPOINT_URL
+#     {APP_PREFIX}_S3_BUCKET_NAME
 #     {APP_PREFIX}_S3_ACCESS_KEY
 #     {APP_PREFIX}_S3_SECRET_KEY
-#     {APP_PREFIX}_S3_BUCKET_NAME
-#     {APP_PREFIX}_S3_TEMP_FOLDER
 #     {APP_PREFIX}_S3_REGION_NAME (for aws)
 #     {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
 #   2. alternatively, specify a comma-separated list of servers in
@@ -46,9 +44,7 @@ for engine in _S3_ENGINES:
         "endpoint-url": env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
         "bucket-name": env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
         "access-key":  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
-        "temp-folder": Path(env_get_str(key=f"{APP_PREFIX}_{_tag}_TEMP_FOLDER",
-                                        def_value="/usr/tmp"))
+        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY")
     }
     if engine == "aws":
         _s3_data["region-name"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
@@ -100,7 +96,7 @@ def _get_params(engine: str) -> tuple:
     Return the current parameters being used for *engine*.
 
     The parameters are returned as a *tuple*, with the elements
-    *endpoint-url*, *bucket-name*, *temp-folder*, *access-key*, and *secret-key*.
+    *endpoint-url*, *bucket-name*, *access-key*, and *secret-key*.
     For *aws* and *minio* engines, the extra elements *region-name* and
     *secure-access* are returned, respectively.
     The meaning of some parameters may vary between different S3 engines.
@@ -110,22 +106,18 @@ def _get_params(engine: str) -> tuple:
     """
     endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
     bucket_name: str = _S3_ACCESS_DATA[engine].get("bucket-name")
-    temp_folder: str = _S3_ACCESS_DATA[engine].get("temp-folder")
     access_key: str = _S3_ACCESS_DATA[engine].get("access-key")
     secret_key: str = _S3_ACCESS_DATA[engine].get("secret-key")
 
     result: tuple | None = None
     if engine == "aws":
         region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
-        result = (endpoint_url, bucket_name, temp_folder,
-                  access_key, secret_key, region_name)
+        result = (endpoint_url, bucket_name, access_key, secret_key, region_name)
     elif engine == "ecs":
-        result = (endpoint_url, bucket_name, temp_folder,
-                  access_key, secret_key)
+        result = (endpoint_url, bucket_name, access_key, secret_key)
     elif engine == "minio":
         secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
-        result = (endpoint_url, bucket_name, temp_folder,
-                  access_key, secret_key, secure_access)
+        result = (endpoint_url, bucket_name, access_key, secret_key, secure_access)
 
     return result
 

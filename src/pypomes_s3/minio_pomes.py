@@ -1,5 +1,4 @@
 import pickle
-import uuid
 from collections.abc import Iterator
 from io import BytesIO
 from logging import Logger
@@ -14,7 +13,7 @@ from unidecode import unidecode
 from urllib3.response import HTTPResponse
 
 from .s3_common import (
-    _get_param, _get_params, _except_msg, _log
+    _get_params, _except_msg, _log
 )
 
 
@@ -31,7 +30,7 @@ def get_client(errors: list[str],
     result: Minio | None = None
 
     # retrieve the access parameters
-    (endpoint_url, bucket_name, temp_folder,
+    (endpoint_url, bucket_name, max_memory,
      access_key, secret_key, secure_access) = _get_params("minio")
 
     # obtain the MinIO client
@@ -114,7 +113,7 @@ def data_store(errors: list[str],
     :return: 'True' if the data was successfully stored, 'False' otherwise
     """
     # initialize the return variable
-    result: bool = False
+    result: bool = True
 
     # make sure to have a MinIO client
     curr_client: Minio = client or get_client(errors=errors,
@@ -140,10 +139,10 @@ def data_store(errors: list[str],
                                    length=length,
                                    content_type=mimetype,
                                    tags=__normalize_tags(tags))
-            result = True
             _log(logger=logger,
                  stmt=(f"Stored {obj_name}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
+            result = True
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
@@ -245,10 +244,10 @@ def file_store(errors: list[str],
                                     file_path=filepath,
                                     content_type=mimetype,
                                     tags=__normalize_tags(tags))
-            result = True
             _log(logger=logger,
                  stmt=(f"Stored {obj_name}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
+            result = True
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
@@ -330,37 +329,33 @@ def object_store(errors: list[str],
                                               logger=logger)
     # proceed, if the MinIO client was obtained
     if curr_client:
-        # serialize the object into a file
-        temp_folder: Path = _get_param("minio", "temp-folder")
-        filepath: Path = temp_folder / f"{uuid.uuid4()}.pickle"
-        with filepath.open("wb") as f:
-            pickle.dump(obj, f)
-
-        # store the file
-        op_errors: list[str] = []
-        file_store(errors=op_errors,
-                   bucket=bucket,
-                   basepath=basepath,
-                   identifier=identifier,
-                   filepath=filepath,
-                   mimetype="application/octet-stream",
-                   tags=tags,
-                   client=curr_client,
-                   logger=logger)
-        # errors ?
-        if op_errors:
-            # yes, report them
-            errors.extend(op_errors)
-            storage: str = "Unable to store"
-        else:
-            # no, remove the file from the file system
+        # serialize the object
+        data: bytes | None = None
+        try:
+            data = pickle.dumps(obj=obj)
+        except Exception as e:
+            _except_msg(errors=errors,
+                        exception=e,
+                        engine="minio",
+                        logger=logger)
+        # store the serialized object
+        if data and data_store(errors=errors,
+                               bucket=bucket,
+                               basepath=basepath,
+                               identifier=identifier,
+                               data=data,
+                               mimetype="application/octet-stream",
+                               tags=tags,
+                               client=curr_client,
+                               logger=logger):
             result = True
-            filepath.unlink()
             storage: str = "Stored "
+        else:
+            storage: str = "Unable to store"
 
         remotepath: Path = Path(basepath) / identifier
         _log(logger=logger,
-             stmt=f"{storage} {remotepath}, bucket {bucket}")
+             stmt=f"{storage} {remotepath.as_posix()}, bucket {bucket}")
 
     return result
 
@@ -390,27 +385,28 @@ def object_retrieve(errors: list[str],
                                               logger=logger)
     # proceed, if the MinIO client was obtained
     if curr_client:
-        # retrieve the file containg the serialized object
-        temp_folder: Path = _get_param("minio", "temp-folder")
-        filepath: Path = temp_folder / f"{uuid.uuid4()}.pickle"
-        stat: Any = file_retrieve(errors=errors,
-                                  bucket=bucket,
-                                  basepath=basepath,
-                                  identifier=identifier,
-                                  filepath=filepath,
-                                  client=curr_client,
-                                  logger=logger)
+        # retrieve the serialized object
+        data: bytes = data_retrieve(errors=errors,
+                                    bucket=bucket,
+                                    basepath=basepath,
+                                    identifier=identifier,
+                                    client=curr_client,
+                                    logger=logger)
         # was the file retrieved ?
-        if stat:
+        if data:
             # yes, umarshall the corresponding object
-            with filepath.open("rb") as f:
-                result = pickle.load(f)
-            filepath.unlink()
+            try:
+                result = pickle.loads(data)
+            except Exception as e:
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="minio",
+                            logger=logger)
 
         retrieval: str = "Retrieved" if result else "Unable to retrieve"
         remotepath: Path = Path(basepath) / identifier
         _log(logger=logger,
-             stmt=f"{retrieval} {remotepath}, bucket {bucket}")
+             stmt=f"{retrieval} {remotepath.as_posix()}, bucket {bucket}")
 
     return result
 
@@ -422,15 +418,17 @@ def item_exists(errors: list[str],
                 client: Minio = None,
                 logger: Logger = None) -> bool:
     """
-    Determine if a given object exists in the *MinIO* store.
+    Determine if a given item exists in the *MinIO* store.
+
+    The item might be unspecified data, a file, or an object.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: optional object identifier
+    :param basepath: the path specifying where to locate the item
+    :param identifier: optional item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the object was found, 'False' otherwise
+    :return: 'True' if the item was found, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -477,10 +475,12 @@ def item_stat(errors: list[str],
     """
     Retrieve and return the information about an item in the *MinIO* store.
 
+    The item might be unspecified data, a file, or an object.
+
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the object
-    :param identifier: the object identifier
+    :param basepath: the path specifying where to locate the item
+    :param identifier: the item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: metadata and information about the item, or 'None' if error or item not found
@@ -522,8 +522,8 @@ def item_remove(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to delete the object at
-    :param identifier: optional object identifier
+    :param basepath: the path specifying the location to delete the item at
+    :param identifier: optional item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: 'True' if the item or folder was deleted or did not exist, 'False' if an error ocurred
@@ -577,7 +577,7 @@ def items_list(errors: list[str],
     :param recursive: whether the location is iterated recursively
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the iterator into the list of items, or 'None' if error or folder not found
+    :return: the iterator into the list of items, or 'None' if error or path not found
     """
     # initialize the return variable
     result: Iterator | None = None
@@ -611,9 +611,11 @@ def tags_retrieve(errors: list[str],
     """
     Retrieve and return the metadata information for an item in the *MinIO* store.
 
+    The item might be unspecified data, a file, or an object.
+
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the object from
+    :param basepath: the path specifying the location to retrieve the item from
     :param identifier: the object identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -654,11 +656,11 @@ def _folder_delete(errors: list[str],
                    client: Minio,
                    logger: Logger = None) -> bool:
     """
-    Traverse the folders recursively, removing its objects.
+    Traverse the folders recursively, removing its items.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to delete the objects at
+    :param basepath: the path specifying the location to delete the items at
     :param client: the MinIO client object
     :param logger: optional logger
     """
