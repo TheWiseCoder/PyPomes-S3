@@ -73,8 +73,8 @@ def s3_get_engines() -> list[str]:
     return _S3_ENGINES.copy()
 
 
-def s3_get_param(key: Literal["endpoint-url", "bucket-name",
-                              "access-key", "secret-key", "region-name", "secure-access"],
+def s3_get_param(key: Literal["endpoint-url", "bucket-name", "access-key",
+                              "secret-key", "region-name", "secure-access"],
                  engine: str = None) -> str:
     """
     Return the connection parameter value for *key*.
@@ -83,7 +83,7 @@ def s3_get_param(key: Literal["endpoint-url", "bucket-name",
     For *aws* and *minio* engines, the extra keys *region-name* and *secure-access* are added to this list,
     respectively.
 
-    :param key: the reference parameter
+    :param key: the connection parameter
     :param engine: the reference S3 engine (the default engine, if not provided)
     :return: the current value of the connection parameter
     """
@@ -121,25 +121,9 @@ def s3_assert_access(errors: list[str] | None,
     :param logger: optional logger
     :return: 'True' if accessing succeeded, 'False' otherwise
     """
-    # initialize the return variable
-    result: bool = False
-
-    # initialize the local errors list
-    op_errors: list[str] = []
-
-    # make sure to have a S3 engine
-    curr_engine: str = _assert_engine(errors=op_errors,
-                                      engine=engine)
-    if curr_engine:
-        client: Any = s3_get_client(errors=op_errors,
-                                    engine=curr_engine,
-                                    logger=logger)
-        result = client is not None
-
-    # acknowledge local errors
-    errors.extend(op_errors)
-
-    return result
+    return s3_get_client(errors=errors,
+                         engine=engine,
+                         logger=logger) is not None
 
 
 def s3_startup(errors: list[str] | None,
@@ -175,8 +159,11 @@ def s3_startup(errors: list[str] | None,
         result = aws_pomes.startup(errors=op_errors,
                                    bucket=bucket,
                                    logger=logger)
-    if curr_engine == "ecs":
-        pass
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.startup(errors=op_errors,
+                                   bucket=bucket,
+                                   logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.startup(errors=op_errors,
@@ -214,8 +201,10 @@ def s3_get_client(errors: list[str] | None,
         from . import aws_pomes
         result = aws_pomes.get_client(errors=op_errors,
                                       logger=logger)
-    if curr_engine == "ecs":
-        pass
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.get_client(errors=op_errors,
+                                      logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.get_client(errors=op_errors,
@@ -268,6 +257,17 @@ def s3_data_store(errors: list[str],
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
+                                      bucket=bucket,
+                                      basepath=basepath,
+                                      identifier=identifier,
+                                      filepath="",
+                                      mimetype=mimetype,
+                                      tags=tags,
+                                      client=client,
+                                      logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.file_store(errors=op_errors,
                                       bucket=bucket,
                                       basepath=basepath,
                                       identifier=identifier,
@@ -338,6 +338,15 @@ def s3_data_retrieve(errors: list[str],
                                          filepath="",
                                          client=client,
                                          logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.file_retrieve(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         filepath="",
+                                         client=client,
+                                         logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.data_retrieve(errors=op_errors,
@@ -394,6 +403,17 @@ def s3_file_store(errors: list[str],
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
+                                      bucket=bucket,
+                                      basepath=basepath,
+                                      identifier=identifier,
+                                      filepath=filepath,
+                                      mimetype=mimetype,
+                                      tags=tags,
+                                      client=client,
+                                      logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.file_store(errors=op_errors,
                                       bucket=bucket,
                                       basepath=basepath,
                                       identifier=identifier,
@@ -461,6 +481,15 @@ def s3_file_retrieve(errors: list[str],
                                          filepath=filepath,
                                          client=client,
                                          logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.file_retrieve(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         filepath=filepath,
+                                         client=client,
+                                         logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.file_retrieve(errors=op_errors,
@@ -514,6 +543,16 @@ def s3_object_store(errors: list[str],
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.object_store(errors=op_errors,
+                                        bucket=bucket,
+                                        basepath=basepath,
+                                        identifier=identifier,
+                                        obj=obj,
+                                        tags=tags,
+                                        client=client,
+                                        logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.object_store(errors=op_errors,
                                         bucket=bucket,
                                         basepath=basepath,
                                         identifier=identifier,
@@ -576,6 +615,14 @@ def s3_object_retrieve(errors: list[str],
                                            identifier=identifier,
                                            client=client,
                                            logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.object_retrieve(errors=op_errors,
+                                           bucket=bucket,
+                                           basepath=basepath,
+                                           identifier=identifier,
+                                           client=client,
+                                           logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.object_retrieve(errors=op_errors,
@@ -599,7 +646,7 @@ def s3_item_exists(errors: list[str],
                    logger: Logger = None) -> bool:
     """
     Determine if a given item exists in the S3 store.
-    
+
     The item might be unspecified data, a file, or an object.
 
     :param errors: incidental error messages
@@ -631,6 +678,14 @@ def s3_item_exists(errors: list[str],
                                        identifier=identifier,
                                        client=client,
                                        logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.item_exists(errors=op_errors,
+                                       bucket=bucket,
+                                       basepath=basepath,
+                                       identifier=identifier,
+                                       client=client,
+                                       logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.item_exists(errors=op_errors,
@@ -654,7 +709,7 @@ def s3_item_stat(errors: list[str],
                  logger: Logger = None) -> Any:
     """
     Retrieve and return the information about an item in the S3 store.
-    
+
     The item might be unspecified data, a file, or an object.
 
     :param errors: incidental error messages
@@ -681,6 +736,14 @@ def s3_item_stat(errors: list[str],
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.item_stat(errors=op_errors,
+                                     bucket=bucket,
+                                     basepath=basepath,
+                                     identifier=identifier,
+                                     client=client,
+                                     logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.item_stat(errors=op_errors,
                                      bucket=bucket,
                                      basepath=basepath,
                                      identifier=identifier,
@@ -739,6 +802,14 @@ def s3_item_remove(errors: list[str],
                                        identifier=identifier,
                                        client=client,
                                        logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.item_remove(errors=op_errors,
+                                       bucket=bucket,
+                                       basepath=basepath,
+                                       identifier=identifier,
+                                       client=client,
+                                       logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.item_remove(errors=op_errors,
@@ -792,6 +863,14 @@ def s3_items_list(errors: list[str],
                                       recursive=recursive,
                                       client=client,
                                       logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.items_list(errors=op_errors,
+                                      bucket=bucket,
+                                      basepath=basepath,
+                                      recursive=recursive,
+                                      client=client,
+                                      logger=logger)
     elif curr_engine == "minio":
         from . import minio_pomes
         result = minio_pomes.items_list(errors=op_errors,
@@ -840,6 +919,14 @@ def s3_tags_retrieve(errors: list[str],
     if curr_engine == "aws":
         from . import aws_pomes
         result = aws_pomes.tags_retrieve(errors=op_errors,
+                                         bucket=bucket,
+                                         basepath=basepath,
+                                         identifier=identifier,
+                                         client=client,
+                                         logger=logger)
+    elif curr_engine == "ecs":
+        from . import ecs_pomes
+        result = ecs_pomes.tags_retrieve(errors=op_errors,
                                          bucket=bucket,
                                          basepath=basepath,
                                          identifier=identifier,

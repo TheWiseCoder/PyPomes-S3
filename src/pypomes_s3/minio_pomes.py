@@ -30,7 +30,7 @@ def get_client(errors: list[str],
     result: Minio | None = None
 
     # retrieve the access parameters
-    (endpoint_url, bucket_name, max_memory,
+    (endpoint_url, bucket_name,
      access_key, secret_key, secure_access) = _get_params("minio")
 
     # obtain the MinIO client
@@ -121,8 +121,8 @@ def data_store(errors: list[str],
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
-        remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.as_posix()
+        remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
 
         # store the data
         bin_data: BinaryIO
@@ -181,8 +181,8 @@ def data_retrieve(errors: list[str],
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
-        remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.as_posix()
+        remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
 
         # retrieve the data
         try:
@@ -234,8 +234,8 @@ def file_store(errors: list[str],
     # was the MinIO client obtained ?
     if curr_client:
         # yes, proceed
-        remote_path: Path = Path(basepath) / identifier
-        obj_name: str = remote_path.as_posix()
+        remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
 
         # store the file
         try:
@@ -285,12 +285,13 @@ def file_retrieve(errors: list[str],
     if curr_client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
         try:
             result = curr_client.fget_object(bucket_name=bucket,
-                                             object_name=f"{remotepath}",
+                                             object_name=obj_name,
                                              file_path=filepath)
             _log(logger=logger,
-                 stmt=f"Retrieved {remotepath}, bucket {bucket}")
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -461,7 +462,7 @@ def item_exists(errors: list[str],
         remotepath: Path = Path(basepath) / identifier
         existence: str = "exists" if result else "do not exist"
         _log(logger=logger,
-             stmt=f"Object {remotepath}, bucket {bucket}, {existence}")
+             stmt=f"Item {remotepath.as_posix()}, bucket {bucket}, {existence}")
 
     return result
 
@@ -495,11 +496,12 @@ def item_stat(errors: list[str],
     if curr_client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
         try:
             result = curr_client.stat_object(bucket_name=bucket,
-                                             object_name=f"{remotepath}")
+                                             object_name=obj_name)
             _log(logger=logger,
-                 stmt=f"Stat'ed {remotepath}, bucket {bucket}")
+                 stmt=f"Stat'ed {obj_name}, bucket {bucket}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -547,12 +549,13 @@ def item_remove(errors: list[str],
         else:
             # yes, remove the object
             remotepath: Path = Path(basepath) / identifier
+            obj_name: str = remotepath.as_posix()
             try:
                 curr_client.remove_object(bucket_name=bucket,
-                                          object_name=f"{remotepath}")
+                                          object_name=obj_name)
                 result = True
                 _log(logger=logger,
-                     stmt=f"Deleted {remotepath}, bucket {bucket}")
+                     stmt=f"Deleted {obj_name}, bucket {bucket}")
             except Exception as e:
                 if not hasattr(e, "code") or e.code != "NoSuchKey":
                     _except_msg(errors=errors,
@@ -631,15 +634,16 @@ def tags_retrieve(errors: list[str],
     if curr_client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
         try:
             tags: Tags = curr_client.get_object_tags(bucket_name=bucket,
-                                                     object_name=f"{remotepath}")
+                                                     object_name=obj_name)
             if tags and len(tags) > 0:
                 result = {}
                 for key, value in tags.items():
                     result[key] = str_from_hex(value)
             _log(logger=logger,
-                 stmt=f"Retrieved {remotepath}, bucket {bucket}, tags {result}")
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}, tags {result}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,

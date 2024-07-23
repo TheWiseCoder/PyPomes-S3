@@ -3,7 +3,7 @@ from pypomes_core import (
     APP_PREFIX,
     env_get_bool, env_get_str, str_sanitize, str_get_positional
 )
-from typing import Any
+from typing import Any, Literal
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
 # - specifying S3 storage parameters with environment variables can be done in two ways:
@@ -80,7 +80,8 @@ def _assert_engine(errors: list[str],
 
 
 def _get_param(engine: str,
-               param: str) -> Any:
+               param: Literal["endpoint-url", "bucket-name", "access-key",
+                              "secret-key", "region-name", "secure-access"]) -> Any:
     """
     Return the current value of *param* being used by *engine*.
 
