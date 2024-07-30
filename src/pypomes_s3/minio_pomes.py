@@ -1,4 +1,3 @@
-import pickle
 from collections.abc import Iterator
 from io import BytesIO
 from logging import Logger
@@ -6,48 +5,13 @@ from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
-from pypomes_core import str_to_hex, str_from_hex
 from pypomes_http import MIMETYPE_BINARY
 from typing import Any, BinaryIO
-from unidecode import unidecode
 from urllib3.response import HTTPResponse
 
 from .s3_common import (
-    _get_params, _except_msg, _log
+    _get_param, _get_params, _log, _normalize_tags, _except_msg
 )
-
-
-def get_client(errors: list[str],
-               logger: Logger = None) -> Minio:
-    """
-    Obtain and return a *MinIO* client object.
-
-    :param errors: incidental error messages
-    :param logger: optional logger
-    :return: the MinIO client object
-    """
-    # initialize the return variable
-    result: Minio | None = None
-
-    # retrieve the access parameters
-    (endpoint_url, bucket_name,
-     access_key, secret_key, secure_access) = _get_params("minio")
-
-    # obtain the MinIO client
-    try:
-        result = Minio(access_key=access_key,
-                       secret_key=secret_key,
-                       endpoint=endpoint_url,
-                       secure=secure_access)
-        _log(logger=logger,
-             stmt="Minio client created")
-
-    except Exception as e:
-        _except_msg(errors=errors,
-                    exception=e,
-                    engine="minio",
-                    logger=logger)
-    return result
 
 
 def startup(errors: list[str],
@@ -67,10 +31,10 @@ def startup(errors: list[str],
     # initialize the return variable
     result: bool = False
 
-    # obtain a MinIO client
+    # obtain a client
     client: Minio = get_client(errors=errors,
                                logger=logger)
-    # was it obtained ?
+    # was the client obtained ?
     if client:
         # yes, proceed
         try:
@@ -84,6 +48,91 @@ def startup(errors: list[str],
                         exception=e,
                         engine="minio",
                         logger=logger)
+    return result
+
+
+def get_client(errors: list[str],
+               logger: Logger = None) -> Minio:
+    """
+    Obtain and return a *MinIO* client object.
+
+    :param errors: incidental error messages
+    :param logger: optional logger
+    :return: the MinIO client object
+    """
+    # initialize the return variable
+    result: Minio | None = None
+
+    # retrieve the access parameters
+    (endpoint_url, _bucket_name, access_key,
+     secret_key, secure_access, region_name) = _get_params("minio")
+
+    # obtain the MinIO client
+    try:
+        result = Minio(access_key=access_key,
+                       secret_key=secret_key,
+                       endpoint=endpoint_url,
+                       secure=secure_access,
+                       region=region_name)
+        _log(logger=logger,
+             stmt="Minio client created")
+
+    except Exception as e:
+        _except_msg(errors=errors,
+                    exception=e,
+                    engine="minio",
+                    logger=logger)
+    return result
+
+
+def data_retrieve(errors: list[str],
+                  bucket: str,
+                  basepath: str | Path,
+                  identifier: str,
+                  data_range: tuple[int, int] = None,
+                  client: Minio = None,
+                  logger: Logger = None) -> bytes:
+    """
+    Retrieve data from the *MinIO* store.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param basepath: the path specifying the location to retrieve the data from
+    :param identifier: the data identifier
+    :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: the bytes retrieved, or 'None' if error or data not found
+    """
+    # initialize the return variable
+    result: bytes | None = None
+
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
+        # yes, proceed
+        remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
+        offset: int = data_range[0] if data_range else 0
+        length: int = data_range[1] - data_range[0] + 1 if data_range else 0
+
+        # retrieve the data
+        try:
+            response: HTTPResponse = client.get_object(bucket_name=bucket,
+                                                       object_name=obj_name,
+                                                       offset=offset,
+                                                       length=length)
+            result = response.data
+            _log(logger=logger,
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
+        except Exception as e:
+            if not hasattr(e, "code") or e.code != "NoSuchKey":
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="minio",
+                            logger=logger)
     return result
 
 
@@ -107,7 +156,7 @@ def data_store(errors: list[str],
     :param data: the data to store
     :param length: the length of the data (defaults to -1: unknown)
     :param mimetype: the data mimetype
-    :param tags: optional metadata describing the file
+    :param tags: optional metadata tags describing the file
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: 'True' if the data was successfully stored, 'False' otherwise
@@ -115,11 +164,11 @@ def data_store(errors: list[str],
     # initialize the return variable
     result: bool = True
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
         obj_name: str = remotepath.as_posix()
@@ -133,117 +182,12 @@ def data_store(errors: list[str],
                        BytesIO(bytes(data, "utf-8"))
             bin_data.seek(0)
         try:
-            curr_client.put_object(bucket_name=bucket,
-                                   object_name=obj_name,
-                                   data=bin_data,
-                                   length=length,
-                                   content_type=mimetype,
-                                   tags=__normalize_tags(tags))
-            _log(logger=logger,
-                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
-                          f"content type {mimetype}, tags {tags}"))
-            result = True
-        except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
-    return result
-
-
-def data_retrieve(errors: list[str],
-                  bucket: str,
-                  basepath: str | Path,
-                  identifier: str,
-                  offset: int = 0,
-                  length: int = 0,
-                  client: Minio = None,
-                  logger: Logger = None) -> bytes:
-    """
-    Retrieve data from the *MinIO* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the data from
-    :param identifier: the data identifier
-    :param offset: the start position within the data (in bytes, defaults to 0: data start)
-    :param length: the length of the data to retrieve (in bytes, defaults to 0: to data finish)
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: the bytes retrieved, or 'None' if error or data not found
-    """
-    # initialize the return variable
-    result: bytes | None = None
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
-
-        # retrieve the data
-        try:
-            response: HTTPResponse = curr_client.get_object(bucket_name=bucket,
-                                                            object_name=obj_name,
-                                                            offset=offset,
-                                                            length=length)
-            result = response.data
-            _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
-        except Exception as e:
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
-    return result
-
-
-def file_store(errors: list[str],
-               bucket: str,
-               basepath: str | Path,
-               identifier: str,
-               filepath: Path | str,
-               mimetype: str,
-               tags: dict[str, str] = None,
-               client: Minio = None,
-               logger: Logger = None) -> bool:
-    """
-    Store a file at the *MinIO* store.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the file at
-    :param identifier: the file identifier, tipically a file name
-    :param filepath: the path specifying where the file is
-    :param mimetype: the file mimetype
-    :param tags: optional metadata describing the file
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: 'True' if the file was successfully stored, 'False' otherwise
-    """
-    # initialize the return variable
-    result: bool = False
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
-
-        # store the file
-        try:
-            curr_client.fput_object(bucket_name=bucket,
-                                    object_name=obj_name,
-                                    file_path=filepath,
-                                    content_type=mimetype,
-                                    tags=__normalize_tags(tags))
+            client.put_object(bucket_name=bucket,
+                              object_name=obj_name,
+                              data=bin_data,
+                              length=length,
+                              content_type=mimetype,
+                              tags=_minio_tags(tags))
             _log(logger=logger,
                  stmt=(f"Stored {obj_name}, bucket {bucket}, "
                           f"content type {mimetype}, tags {tags}"))
@@ -278,20 +222,21 @@ def file_retrieve(errors: list[str],
     # initialize the return variable
     result: Any = None
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
         obj_name: str = remotepath.as_posix()
+        file_path: str = Path(filepath).as_posix()
         try:
-            result = curr_client.fget_object(bucket_name=bucket,
-                                             object_name=obj_name,
-                                             file_path=filepath)
+            result = client.fget_object(bucket_name=bucket,
+                                        object_name=obj_name,
+                                        file_path=file_path)
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}, to {file_path}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -301,207 +246,155 @@ def file_retrieve(errors: list[str],
     return result
 
 
-def object_store(errors: list[str],
-                 bucket: str,
-                 basepath: str | Path,
-                 identifier: str,
-                 obj: Any,
-                 tags: dict[str, str] = None,
-                 client: Minio = None,
-                 logger: Logger = None) -> bool:
+def file_store(errors: list[str],
+               bucket: str,
+               basepath: str | Path,
+               identifier: str,
+               filepath: Path | str,
+               mimetype: str,
+               tags: dict[str, str] = None,
+               client: Minio = None,
+               logger: Logger = None) -> bool:
     """
-    Store an object at the *MinIO* store.
+    Store a file at the *MinIO* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the object at
-    :param identifier: the object identifier
-    :param obj: object to be stored
-    :param tags: optional metadata describing the object
+    :param basepath: the path specifying the location to store the file at
+    :param identifier: the file identifier, tipically a file name
+    :param filepath: the path specifying where the file is
+    :param mimetype: the file mimetype
+    :param tags: optional metadata tags describing the file
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the object was successfully stored, 'False' otherwise
+    :return: 'True' if the file was successfully stored, 'False' otherwise
     """
     # initialize the return variable
     result: bool = False
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # proceed, if the MinIO client was obtained
-    if curr_client:
-        # serialize the object
-        data: bytes | None = None
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
+        # yes, proceed
+        remotepath: Path = Path(basepath) / identifier
+        obj_name: str = remotepath.as_posix()
+        file_path: str = Path(filepath).as_posix()
+
+        # store the file
         try:
-            data = pickle.dumps(obj=obj)
+            client.fput_object(bucket_name=bucket,
+                               object_name=obj_name,
+                               file_path=file_path,
+                               content_type=mimetype,
+                               tags=_minio_tags(tags))
+            _log(logger=logger,
+                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
+                       f"from {file_path}, content type {mimetype}, tags {tags}"))
+            result = True
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
                         engine="minio",
                         logger=logger)
-        # store the serialized object
-        if data and data_store(errors=errors,
-                               bucket=bucket,
-                               basepath=basepath,
-                               identifier=identifier,
-                               data=data,
-                               mimetype="application/octet-stream",
-                               tags=tags,
-                               client=curr_client,
-                               logger=logger):
-            result = True
-            storage: str = "Stored "
-        else:
-            storage: str = "Unable to store"
-
-        remotepath: Path = Path(basepath) / identifier
-        _log(logger=logger,
-             stmt=f"{storage} {remotepath.as_posix()}, bucket {bucket}")
-
     return result
 
 
-def object_retrieve(errors: list[str],
-                    bucket: str,
-                    basepath: str | Path,
-                    identifier: str,
-                    client: Minio = None,
-                    logger: Logger = None) -> Any:
+def item_get_info(errors: list[str],
+                  bucket: str,
+                  basepath: str | Path,
+                  identifier: str | None,
+                  client: Minio = None,
+                  logger: Logger = None) -> dict[str, Any]:
     """
-    Retrieve an object from the *MinIO* store.
+    Retrieve and return information about an item in the *MinIO* store.
 
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the object from
-    :param identifier: the object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: the object retrieved, or 'None' if error or object not found
-    """
-    # initialize the return variable
-    result: Any = None
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # proceed, if the MinIO client was obtained
-    if curr_client:
-        # retrieve the serialized object
-        data: bytes = data_retrieve(errors=errors,
-                                    bucket=bucket,
-                                    basepath=basepath,
-                                    identifier=identifier,
-                                    client=curr_client,
-                                    logger=logger)
-        # was the file retrieved ?
-        if data:
-            # yes, umarshall the corresponding object
-            try:
-                result = pickle.loads(data)
-            except Exception as e:
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
-
-        retrieval: str = "Retrieved" if result else "Unable to retrieve"
-        remotepath: Path = Path(basepath) / identifier
-        _log(logger=logger,
-             stmt=f"{retrieval} {remotepath.as_posix()}, bucket {bucket}")
-
-    return result
-
-
-def item_exists(errors: list[str],
-                bucket: str,
-                basepath: str | Path,
-                identifier: str | None,
-                client: Minio = None,
-                logger: Logger = None) -> bool:
-    """
-    Determine if a given item exists in the *MinIO* store.
-
-    The item might be unspecified data, a file, or an object.
-
+    The information about the item might include:
+        - *last_modified*: the date and time the item was last modified
+        - *size*: the size of the item in bytes
+        - *etag*: a hash of the item
+        - *is_dir*: a *bool* indicating if the item is a directory
+        - *version_id*: the version of the item, if bucket versioning is enabled
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param basepath: the path specifying where to locate the item
     :param identifier: optional item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the item was found, 'False' otherwise
+    :return: information about the item, an empty 'dict' if item not found, or 'None' if error
     """
     # initialize the return variable
-    result: bool = False
+    result: dict[str, Any] | None = None
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # proceed, if the MinIO client eas obtained
-    if curr_client:
-        # was the identifier provided ?
-        if not identifier:
-            # no, object is a folder
-            objs: Iterator = items_list(errors=errors,
-                                        bucket=bucket,
-                                        basepath=basepath,
-                                        recursive=False,
-                                        client=curr_client,
-                                        logger=logger)
-            result = next(objs, None) is None
-
-        # verify the status of the object
-        elif item_stat(errors=errors,
-                       bucket=bucket,
-                       basepath=basepath,
-                       identifier=identifier,
-                       client=curr_client,
-                       logger=logger):
-            result = True
-
-        remotepath: Path = Path(basepath) / identifier
-        existence: str = "exists" if result else "do not exist"
-        _log(logger=logger,
-             stmt=f"Item {remotepath.as_posix()}, bucket {bucket}, {existence}")
-
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
+        # yes, proceed
+        if identifier:
+            remotepath: Path = Path(basepath) / identifier
+        else:
+            remotepath: Path = Path(basepath)
+        obj_name: str = remotepath.as_posix()
+        try:
+            stats: MinioObject = client.stat_object(bucket_name=bucket,
+                                                    object_name=obj_name)
+            result = vars(stats)
+            _log(logger=logger,
+                 stmt=f"Got info for {obj_name}, bucket {bucket}")
+        except Exception as e:
+            if hasattr(e, "code") or e.code != "NoSuchKey":
+                result = {}
+            else:
+                _except_msg(errors=errors,
+                            exception=e,
+                            engine="minio",
+                            logger=logger)
     return result
 
 
-def item_stat(errors: list[str],
-              bucket: str,
-              basepath: str | Path,
-              identifier: str,
-              client: Minio = None,
-              logger: Logger = None) -> MinioObject:
+def item_get_tags(errors: list[str],
+                  bucket: str,
+                  basepath: str | Path,
+                  identifier: str,
+                  client: Minio = None,
+                  logger: Logger = None) -> dict[str, str]:
     """
-    Retrieve and return the information about an item in the *MinIO* store.
+    Retrieve and return the existing metadata tags for an item in the *MinIO* store.
 
     The item might be unspecified data, a file, or an object.
+    If item was not found, or has no associated metadata tags, an empty *dict* is returned.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the item
-    :param identifier: the item identifier
+    :param basepath: the path specifying the location to retrieve the item from
+    :param identifier: the object identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: metadata and information about the item, or 'None' if error or item not found
+    :return: the metadata tags, an empty 'dict' if item not found os has no tags, or 'None' if error
     """
     # initialize the return variable
-    result: MinioObject | None = None
+    result: dict[str, Any] | None = None
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
         # yes, proceed
         remotepath: Path = Path(basepath) / identifier
         obj_name: str = remotepath.as_posix()
         try:
-            result = curr_client.stat_object(bucket_name=bucket,
-                                             object_name=obj_name)
+            tags: Tags = client.get_object_tags(bucket_name=bucket,
+                                                object_name=obj_name)
+            if tags:
+                result = {key: value for key, value in tags.items()}
+            else:
+                result = {}
             _log(logger=logger,
-                 stmt=f"Stat'ed {obj_name}, bucket {bucket}")
+                 stmt=f"Retrieved {obj_name}, bucket {bucket}, tags {result}")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -516,11 +409,11 @@ def item_remove(errors: list[str],
                 basepath: str | Path,
                 identifier: str = None,
                 client: Minio = None,
-                logger: Logger = None) -> bool:
+                logger: Logger = None) -> int:
     """
-    Remove an item from the *MinIO* store.
+    Remove an item, or items in a folder, from the *MinIO* store.
 
-    If *identifier* is not provided, then the folder *basepath* is deleted
+    If *identifier* is not provided, then a maximum of 10000 items in the folder *basepath* are removed.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
@@ -528,75 +421,105 @@ def item_remove(errors: list[str],
     :param identifier: optional item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the item or folder was deleted or did not exist, 'False' if an error ocurred
+    :return: The number of items successfully removed
     """
     # initialize the return variable
-    result: bool = False
+    result: int = 0
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # proceed, if the MinIO client was obtained
-    if curr_client:
-        # was the identifier provided ?
-        if identifier is None:
-            # no, remove the folder
-            result = _folder_delete(errors=errors,
-                                    bucket=bucket,
-                                    basepath=basepath,
-                                    client=curr_client,
-                                    logger=logger)
-        else:
-            # yes, remove the object
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    bucket = bucket or _get_param(engine="minio",
+                                  param="bucket-name")
+    # was the client obtained ?
+    if client:
+        # yes, was the identifier provided ?
+        if identifier:
+            # yes, remove the item
             remotepath: Path = Path(basepath) / identifier
             obj_name: str = remotepath.as_posix()
-            try:
-                curr_client.remove_object(bucket_name=bucket,
-                                          object_name=obj_name)
-                result = True
-                _log(logger=logger,
-                     stmt=f"Deleted {obj_name}, bucket {bucket}")
-            except Exception as e:
-                if not hasattr(e, "code") or e.code != "NoSuchKey":
-                    _except_msg(errors=errors,
-                                exception=e,
-                                engine="minio",
-                                logger=logger)
+            result += _item_delete(errors=errors,
+                                   bucket=bucket,
+                                   obj_name=obj_name,
+                                   client=client,
+                                   logger=logger)
+        else:
+            # no, remove items in the folder
+            op_errors: list[str] = []
+            items_data: list[dict[str, Any]] = items_list(errors=op_errors,
+                                                          bucket=bucket,
+                                                          basepath=basepath,
+                                                          max_count=10000)
+            for item_data in items_data:
+                if op_errors or result >= 10000:
+                    break
+                obj_name: str = item_data.get("key")
+                if item_data.get("is_dir"):
+                    result += item_remove(errors=op_errors,
+                                          bucket=bucket,
+                                          basepath=obj_name,
+                                          client=client,
+                                          logger=logger)
+                else:
+                    result += _item_delete(errors=op_errors,
+                                          bucket=bucket,
+                                          obj_name=obj_name,
+                                          client=client,
+                                           logger=logger)
     return result
 
 
 def items_list(errors: list[str],
                bucket: str,
                basepath: str | Path,
-               recursive: bool = False,
+               max_count: int,
                client: Minio = None,
-               logger: Logger = None) -> Iterator:
+               logger: Logger = None) -> list[dict[str, Any]]:
     """
-    Retrieve and return an iterator into the list of items at *basepath*, in the *MinIO* store.
+    Retrieve and return information on a list of items in *basepath*, in the *MinIO* store.
+
+    The information about each item might include:
+        - *last_modified*: the date and time the item was last modified
+        - *size*: the size of the item in bytes
+        - *etag*: a hash of the item
+        - *is_dir*: a *bool* indicating if the item is a directory
+        - *version_id*: the version of the item, if bucket versioning is enabled
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param basepath: the path specifying the location to iterate from
-    :param recursive: whether the location is iterated recursively
+    :param max_count: the maximum number of items to return
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: the iterator into the list of items, or 'None' if error or path not found
     """
     # initialize the return variable
-    result: Iterator | None = None
+    result: list[dict[str, Any]] | None = None
 
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
         # yes, proceed
+        count: int = 0
         try:
-            result = curr_client.list_objects(bucket_name=bucket,
-                                              prefix=basepath,
-                                              recursive=recursive)
+            # obtain an iterator on the items in the folder
+            iterator: Iterator = client.list_objects(bucket_name=bucket,
+                                                     prefix=basepath,
+                                                     include_user_meta=True,
+                                                     recursive=True)
+            # traverse 'iterator'
+            result = []
+            for stats in iterator:
+                result.append(vars(stats))
+                count += 1
+                if count == max_count:
+                    break
+
+            # log the results
             _log(logger=logger,
-                 stmt=f"Listed {basepath}, bucket {bucket}")
+                 stmt=f"Listed {count} items in '{basepath}', bucket '{bucket}'")
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
@@ -605,111 +528,48 @@ def items_list(errors: list[str],
     return result
 
 
-def tags_retrieve(errors: list[str],
-                  bucket: str,
-                  basepath: str | Path,
-                  identifier: str,
-                  client: Minio = None,
-                  logger: Logger = None) -> dict[str, str]:
+def _item_delete(errors: list[str],
+                 bucket: str,
+                 obj_name: str,
+                 client: Minio,
+                 logger: Logger = None) -> int:
     """
-    Retrieve and return the metadata information for an item in the *MinIO* store.
-
-    The item might be unspecified data, a file, or an object.
+    Delete the item in the *MinIO* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the item from
-    :param identifier: the object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: the metadata about the item, or 'None' if error or item not found
-    """
-    # initialize the return variable
-    result: dict[str, Any] | None = None
-
-    # make sure to have a MinIO client
-    curr_client: Minio = client or get_client(errors=errors,
-                                              logger=logger)
-    # was the MinIO client obtained ?
-    if curr_client:
-        # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
-        try:
-            tags: Tags = curr_client.get_object_tags(bucket_name=bucket,
-                                                     object_name=obj_name)
-            if tags and len(tags) > 0:
-                result = {}
-                for key, value in tags.items():
-                    result[key] = str_from_hex(value)
-            _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}, tags {result}")
-        except Exception as e:
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
-
-    return result
-
-
-def _folder_delete(errors: list[str],
-                   bucket: str,
-                   basepath: str | Path,
-                   client: Minio,
-                   logger: Logger = None) -> bool:
-    """
-    Traverse the folders recursively, removing its items.
-
-    :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to delete the items at
+    :param obj_name: the item's name, including its path
     :param client: the MinIO client object
     :param logger: optional logger
+    :return: '1' if the item was deleted, '0' otherwise
     """
     # initialize the return variable
-    result: bool = True
+    result: int = 0
 
-    # obtain the list of entries in the given folder
-    objs: Iterator = items_list(errors=errors,
-                                bucket=bucket,
-                                basepath=basepath,
-                                recursive=True,
-                                logger=logger) or []
-    # traverse the list
-    for obj in objs:
-        try:
-            client.remove_object(bucket_name=bucket,
-                                 object_name=obj.object_name)
-            _log(logger=logger,
-                 stmt=f"Removed folder {basepath}, bucket {bucket}")
-        except Exception as e:
-            # SANITY CHECK: in case of concurrent exclusion
-            # ruff: noqa: PERF203
-            if not hasattr(e, "code") or e.code != "NoSuchKey":
-                result = False
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
+    try:
+        client.remove_object(bucket_name=bucket,
+                             object_name=obj_name)
+        _log(logger=logger,
+             stmt=f"Removed item {obj_name}, bucket {bucket}")
+        result = 1
+    except Exception as e:
+        # SANITY CHECK: in case of concurrent exclusion
+        if not hasattr(e, "code") or e.code != "NoSuchKey":
+            _except_msg(errors=errors,
+                        exception=e,
+                        engine="minio",
+                        logger=logger)
     return result
 
 
-def __normalize_tags(tags: dict[str, str]) -> Tags:
+def _minio_tags(tags: dict[str, str]) -> Tags:
 
-    # initialize return variable
-    result: Tags | None
+    # initialize the return variable
+    result: Tags | None = None
 
-    # have tags been defined ?
     if tags:
-        # yes, process them
         result = Tags(for_object=True)
-        for key, value in tags.items():
-            # normalize key, by removing all diacritics,
-            # and convert 'value' to its hex representation
-            result[unidecode(key)] = str_to_hex(value)
-    else:
-        result = None
+        for key, value in _normalize_tags(tags):
+            result[key] = value
 
     return result

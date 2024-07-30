@@ -1,24 +1,26 @@
 from logging import DEBUG, Logger
+from minio.commonconfig import Tags
 from pypomes_core import (
     APP_PREFIX,
-    env_get_bool, env_get_str, str_sanitize, str_get_positional
+    env_get_bool, env_get_str, str_sanitize
 )
 from typing import Any, Literal
+from unidecode import unidecode
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
 # - specifying S3 storage parameters with environment variables can be done in two ways:
 #   1. specify the set
-#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'ecs', 'minio')
+#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'minio')
 #     {APP_PREFIX}_S3_ENDPOINT_URL
 #     {APP_PREFIX}_S3_BUCKET_NAME
 #     {APP_PREFIX}_S3_ACCESS_KEY
 #     {APP_PREFIX}_S3_SECRET_KEY
-#     {APP_PREFIX}_S3_REGION_NAME (for aws)
-#     {APP_PREFIX}_S3_SECURE_ACCESS (for minio)
+#     {APP_PREFIX}_S3_SECURE_ACCESS
+#     {APP_PREFIX}_S3_REGION_NAME
 #   2. alternatively, specify a comma-separated list of servers in
 #     {APP_PREFIX}_S3_ENGINES
 #     and, for each engine, specify the set above, replacing 'S3' with
-#     'AWS', 'ECS', and 'MINIO', respectively, for the engines listed
+#     'AWS' and 'MINIO', respectively, for the engines listed
 
 _S3_ACCESS_DATA: dict = {}
 _S3_ENGINES: list[str] = []
@@ -37,20 +39,15 @@ for engine in _S3_ENGINES:
         _tag = "S3"
         _default_setup = False
     else:
-        _tag: str = str_get_positional(source=engine,
-                                       list_origin=["aws", "ecs", "minio"],
-                                       list_dest=["AWS", "ECS", "MINIO"])
-    _s3_data = {
+        _tag = engine.upper()
+    _S3_ACCESS_DATA[engine] = {
         "endpoint-url": env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
         "bucket-name": env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
         "access-key":  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY")
+        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
+        "secure-access": env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS"),
+        "region-name": env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
     }
-    if engine == "aws":
-        _s3_data["region-name"] = env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
-    elif engine == "minio":
-        _s3_data["secure-access"] = env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS")
-    _S3_ACCESS_DATA[engine] = _s3_data
 
 
 def _assert_engine(errors: list[str],
@@ -96,10 +93,8 @@ def _get_params(engine: str) -> tuple:
     """
     Return the current parameters being used for *engine*.
 
-    The parameters are returned as a *tuple*, with the elements
-    *endpoint-url*, *bucket-name*, *access-key*, and *secret-key*.
-    For *aws* and *minio* engines, the extra elements *region-name* and
-    *secure-access* are returned, respectively.
+    The parameters are returned as a *tuple*, with the elements *endpoint-url*,
+    *bucket-name*, *access-key*, *secret-key*, *secure-access*, and *region-name*.
     The meaning of some parameters may vary between different S3 engines.
 
     :param engine: the reference database engine
@@ -109,18 +104,11 @@ def _get_params(engine: str) -> tuple:
     bucket_name: str = _S3_ACCESS_DATA[engine].get("bucket-name")
     access_key: str = _S3_ACCESS_DATA[engine].get("access-key")
     secret_key: str = _S3_ACCESS_DATA[engine].get("secret-key")
+    secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
+    region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
 
-    result: tuple | None = None
-    if engine == "aws":
-        region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
-        result = (endpoint_url, bucket_name, access_key, secret_key, region_name)
-    elif engine == "ecs":
-        result = (endpoint_url, bucket_name, access_key, secret_key)
-    elif engine == "minio":
-        secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
-        result = (endpoint_url, bucket_name, access_key, secret_key, secure_access)
-
-    return result
+    return (endpoint_url, bucket_name, access_key,
+            secret_key, secure_access, region_name)
 
 
 def _except_msg(errors: list[str],
@@ -165,3 +153,19 @@ def _log(logger: Logger,
             errors.append(err_msg)
     if logger and stmt:
         logger.log(level, stmt)
+
+
+def _normalize_tags(tags: dict[str, str]) -> dict[str, str]:
+
+    # initialize the return variable
+    result: dict[str, str] | None = None
+
+    # have tags been defined ?
+    if tags:
+        # yes, process them
+        result = Tags(for_object=True)
+        for key, value in tags.items():
+            # normalize 'key' and 'value', by removing all diacritics
+            result[unidecode(key).lower()] = unidecode(value)
+
+    return result
