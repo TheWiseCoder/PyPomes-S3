@@ -1,5 +1,4 @@
 from logging import DEBUG, Logger
-from minio.commonconfig import Tags
 from pypomes_core import (
     APP_PREFIX,
     env_get_bool, env_get_str, str_sanitize
@@ -163,9 +162,9 @@ def _normalize_tags(tags: dict[str, str]) -> dict[str, str]:
     # have tags been defined ?
     if tags:
         # yes, process them
-        result = Tags(for_object=True)
+        result = {}
         for key, value in tags.items():
             # normalize 'key' and 'value', by removing all diacritics
-            result[unidecode(key).lower()] = unidecode(value)
+            result[unidecode(string=key).lower()] = unidecode(string=value)
 
     return result

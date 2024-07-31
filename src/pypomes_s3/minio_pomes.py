@@ -587,9 +587,11 @@ def _minio_tags(tags: dict[str, str]) -> Tags:
     # initialize the return variable
     result: Tags | None = None
 
+    # have tags been defined ?
     if tags:
+        # yes, process them
         result = Tags(for_object=True)
-        for key, value in _normalize_tags(tags).items():
+        for key, value in _normalize_tags(tags=tags).items():
             result[key] = value
 
     return result
