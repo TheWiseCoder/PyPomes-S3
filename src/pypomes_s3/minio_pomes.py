@@ -87,7 +87,7 @@ def get_client(errors: list[str],
 
 def data_retrieve(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   data_range: tuple[int, int] = None,
                   client: Minio = None,
@@ -97,7 +97,7 @@ def data_retrieve(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the data from
+    :param prefix: the path specifying the location to retrieve the data from
     :param identifier: the data identifier
     :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
     :param client: optional MinIO client (obtains a new one, if not provided)
@@ -113,8 +113,8 @@ def data_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
         offset: int = data_range[0] if data_range else 0
         length: int = data_range[1] - data_range[0] + 1 if data_range else 0
 
@@ -138,7 +138,7 @@ def data_retrieve(errors: list[str],
 
 def data_store(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                identifier: str,
                data: bytes | str | BinaryIO,
                length: int = -1,
@@ -151,7 +151,7 @@ def data_store(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the file at
+    :param prefix: the path specifying the location to store the file at
     :param identifier: the data identifier
     :param data: the data to store
     :param length: the length of the data (defaults to -1: unknown)
@@ -170,8 +170,8 @@ def data_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
 
         # store the data
         bin_data: BinaryIO
@@ -202,7 +202,7 @@ def data_store(errors: list[str],
 
 def file_retrieve(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   filepath: Path | str,
                   client: Minio = None,
@@ -212,7 +212,7 @@ def file_retrieve(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the file from
+    :param prefix: the path specifying the location to retrieve the file from
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
     :param client: optional MinIO client (obtains a new one, if not provided)
@@ -228,8 +228,8 @@ def file_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
         file_path: str = Path(filepath).as_posix()
         try:
             result = client.fget_object(bucket_name=bucket,
@@ -248,7 +248,7 @@ def file_retrieve(errors: list[str],
 
 def file_store(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                identifier: str,
                filepath: Path | str,
                mimetype: str,
@@ -260,7 +260,7 @@ def file_store(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the file at
+    :param prefix: the path specifying the location to store the file at
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path specifying where the file is
     :param mimetype: the file mimetype
@@ -278,8 +278,8 @@ def file_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
         file_path: str = Path(filepath).as_posix()
 
         # store the file
@@ -303,8 +303,8 @@ def file_store(errors: list[str],
 
 def item_get_info(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
-                  identifier: str | None,
+                  prefix: str | Path,
+                  identifier: str,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
@@ -318,8 +318,8 @@ def item_get_info(errors: list[str],
         - *version_id*: the version of the item, if bucket versioning is enabled
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying where to locate the item
-    :param identifier: optional item identifier
+    :param prefix: the path specifying where to locate the item
+    :param identifier: the item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the item, an empty 'dict' if item not found, or 'None' if error
@@ -333,11 +333,8 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        if identifier:
-            remotepath: Path = Path(basepath) / identifier
-        else:
-            remotepath: Path = Path(basepath)
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
         try:
             stats: MinioObject = client.stat_object(bucket_name=bucket,
                                                     object_name=obj_name)
@@ -357,7 +354,7 @@ def item_get_info(errors: list[str],
 
 def item_get_tags(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, str]:
@@ -369,7 +366,7 @@ def item_get_tags(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the item from
+    :param prefix: the path specifying the location to retrieve the item from
     :param identifier: the object identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -384,8 +381,8 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_name: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
         try:
             tags: Tags = client.get_object_tags(bucket_name=bucket,
                                                 object_name=obj_name)
@@ -406,19 +403,17 @@ def item_get_tags(errors: list[str],
 
 def item_remove(errors: list[str],
                 bucket: str,
-                basepath: str | Path,
+                prefix: str | Path,
                 identifier: str = None,
                 client: Minio = None,
                 logger: Logger = None) -> int:
     """
-    Remove an item, or items in a folder, from the *MinIO* store.
-
-    If *identifier* is not provided, then a maximum of 10000 items in the folder *basepath* are removed.
+    Remove an item from the *MinIO* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to delete the item at
-    :param identifier: optional item identifier
+    :param prefix: the path specifying the location to delete the item at
+    :param identifier: the item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: The number of items successfully removed
@@ -433,50 +428,25 @@ def item_remove(errors: list[str],
                                   param="bucket-name")
     # was the client obtained ?
     if client:
-        # yes, was the identifier provided ?
-        if identifier:
-            # yes, remove the item
-            remotepath: Path = Path(basepath) / identifier
-            obj_name: str = remotepath.as_posix()
-            result += _item_delete(errors=errors,
-                                   bucket=bucket,
-                                   obj_name=obj_name,
-                                   client=client,
-                                   logger=logger)
-        else:
-            # no, remove items in the folder
-            op_errors: list[str] = []
-            items_data: list[dict[str, Any]] = items_list(errors=op_errors,
-                                                          bucket=bucket,
-                                                          basepath=basepath,
-                                                          max_count=10000)
-            for item_data in items_data:
-                if op_errors or result >= 10000:
-                    break
-                obj_name: str = item_data.get("key")
-                if item_data.get("is_dir"):
-                    result += item_remove(errors=op_errors,
-                                          bucket=bucket,
-                                          basepath=obj_name,
-                                          client=client,
-                                          logger=logger)
-                else:
-                    result += _item_delete(errors=op_errors,
-                                          bucket=bucket,
-                                          obj_name=obj_name,
-                                          client=client,
-                                           logger=logger)
+        # yes, remove the item
+        obj_path: Path = Path(prefix) / identifier
+        obj_name: str = obj_path.as_posix()
+        result = _item_delete(errors=errors,
+                              bucket=bucket,
+                              obj_name=obj_name,
+                              client=client,
+                              logger=logger)
     return result
 
 
 def items_list(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                max_count: int,
                client: Minio = None,
                logger: Logger = None) -> list[dict[str, Any]]:
     """
-    Retrieve and return information on a list of items in *basepath*, in the *MinIO* store.
+    Recursively retrieve and return information on a list of items in *prefix*, in the *MinIO* store.
 
     The information about each item might include:
         - *last_modified*: the date and time the item was last modified
@@ -487,7 +457,7 @@ def items_list(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to iterate from
+    :param prefix: the path specifying the location to retrieve the items from
     :param max_count: the maximum number of items to return
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -503,28 +473,78 @@ def items_list(errors: list[str],
     if client:
         # yes, proceed
         count: int = 0
+        obj_path: str = Path(prefix).as_posix()
         try:
             # obtain an iterator on the items in the folder
             iterator: Iterator = client.list_objects(bucket_name=bucket,
-                                                     prefix=basepath,
+                                                     prefix=obj_path,
                                                      include_user_meta=True,
                                                      recursive=True)
             # traverse 'iterator'
             result = []
             for stats in iterator:
-                result.append(vars(stats))
-                count += 1
-                if count == max_count:
-                    break
+                # skip item if it is a folder
+                if not hasattr(stats, "is_dir") or not stats.is_dir:
+                    result.append(vars(stats))
+                    count += 1
+                    if count >= max_count:
+                        break
 
             # log the results
             _log(logger=logger,
-                 stmt=f"Listed {count} items in '{basepath}', bucket '{bucket}'")
+                 stmt=f"Listed {count} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
                         engine="minio",
                         logger=logger)
+    return result
+
+
+def items_remove(errors: list[str],
+                 bucket: str,
+                 prefix: str | Path,
+                 max_count: int,
+                 client: Minio = None,
+                 logger: Logger = None) -> int:
+    """
+    Recursively remove up to *max_count* items in a folder, from the *MinIO* store.
+
+    The removal process is aborted if an error occurs.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param prefix: the path specifying the location to remove the items from
+    :param max_count: the maximum number of items to remove
+    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: The number of items successfully removed
+    """
+    # initialize the return variable
+    result: int = 0
+
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    bucket = bucket or _get_param(engine="minio",
+                                  param="bucket-name")
+    # was the client obtained ?
+    if client:
+        # remove items in the folder
+        op_errors: list[str] = []
+        items_data: list[dict[str, Any]] = items_list(errors=op_errors,
+                                                      bucket=bucket,
+                                                      prefix=prefix,
+                                                      max_count=10000)
+        for item_data in items_data:
+            if op_errors or result >= max_count:
+                break
+            obj_name: str = item_data.get("key")
+            result += _item_delete(errors=op_errors,
+                                   bucket=bucket,
+                                   obj_name=obj_name,
+                                   client=client,
+                                   logger=logger)
     return result
 
 

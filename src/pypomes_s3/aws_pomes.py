@@ -88,7 +88,7 @@ def startup(errors: list[str],
 
 def data_retrieve(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   data_range: tuple[int, int] = None,
                   client: BaseClient = None,
@@ -98,10 +98,10 @@ def data_retrieve(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the data from
+    :param prefix: the path specifying the location to retrieve the data from
     :param identifier: the data identifier
     :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: the bytes retrieved, or 'None' if error or data not found
     """
@@ -114,8 +114,8 @@ def data_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
         obj_range: str = f"bytes={data_range[0]}-{data_range[1]}" if data_range else None
 
 
@@ -138,7 +138,7 @@ def data_retrieve(errors: list[str],
 
 def data_store(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                identifier: str,
                data: bytes | str | BinaryIO,
                mimetype: str = MIMETYPE_BINARY,
@@ -146,16 +146,16 @@ def data_store(errors: list[str],
                client: BaseClient = None,
                logger: Logger = None) -> bool:
     """
-    Store *data* at the *MinIO* store.
+    Store *data* at the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the file at
+    :param prefix: the path specifying the location to store the file at
     :param identifier: the data identifier
     :param data: the data to store
     :param mimetype: the data mimetype
     :param tags: optional metadata tags describing the file
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: 'True' if the data was successfully stored, 'False' otherwise
     """
@@ -168,8 +168,8 @@ def data_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
 
         # store the data
         bin_data: BinaryIO
@@ -198,21 +198,21 @@ def data_store(errors: list[str],
 
 
 def file_retrieve(errors: list[str],
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   filepath: Path | str,
                   bucket: str,
                   client: BaseClient = None,
                   logger: Logger = None) -> Any:
     """
-    Retrieve a file from the *MinIO* store.
+    Retrieve a file from the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the file from
+    :param prefix: the path specifying the location to retrieve the file from
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the file retrieved, or 'None' if error or file not found
     """
@@ -225,8 +225,8 @@ def file_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
         file_path: str = Path(filepath).as_posix()
         try:
             result = client.download_file(Bucket=bucket,
@@ -245,7 +245,7 @@ def file_retrieve(errors: list[str],
 
 def file_store(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                identifier: str,
                filepath: Path | str,
                mimetype: str,
@@ -253,16 +253,16 @@ def file_store(errors: list[str],
                client: BaseClient = None,
                logger: Logger = None) -> bool:
     """
-    Store a file at the *MinIO* store.
+    Store a file at the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to store the file at
+    :param prefix: the path specifying the location to store the file at
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path specifying where the file is
     :param mimetype: the file mimetype
     :param tags: optional metadata tags describing the file
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: 'True' if the file was successfully stored, 'False' otherwise
     """
@@ -275,8 +275,8 @@ def file_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
         file_path: str = Path(filepath).as_posix()
         extra_args: dict[str, Any] | None = None
         if mimetype or tags:
@@ -305,7 +305,7 @@ def file_store(errors: list[str],
 
 
 def item_get_info(errors: list[str],
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   bucket: str,
                   client: BaseClient = None,
@@ -351,10 +351,10 @@ def item_get_info(errors: list[str],
     }
 
     :param errors: incidental error messages
-    :param basepath: the path specifying where to locate the item
+    :param prefix: the path specifying where to locate the item
     :param identifier: the item identifier
     :param bucket: the bucket to use
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the item, or 'None' if error or item not found
     """
@@ -367,8 +367,8 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
         try:
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key)
@@ -385,7 +385,7 @@ def item_get_info(errors: list[str],
 
 def item_get_tags(errors: list[str],
                   bucket: str,
-                  basepath: str | Path,
+                  prefix: str | Path,
                   identifier: str,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, str]:
@@ -440,9 +440,9 @@ def item_get_tags(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to retrieve the item from
+    :param prefix: the path specifying the location to retrieve the item from
     :param identifier: the object identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: the metadata tags associated with the item, or 'None' if error or item not found
     """
@@ -457,8 +457,8 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        remotepath: Path = Path(basepath) / identifier
-        obj_key: str = remotepath.as_posix()
+        obj_path: Path = Path(prefix) / identifier
+        obj_key: str = obj_path.as_posix()
         try:
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
@@ -477,20 +477,20 @@ def item_get_tags(errors: list[str],
 
 def item_remove(errors: list[str],
                 bucket: str,
-                basepath: str | Path,
+                prefix: str | Path,
                 identifier: str = None,
                 client: BaseClient = None,
                 logger: Logger = None) -> int:
     """
     Remove an item, or items in a folder, from the *AWS* store.
 
-    If *identifier* is not provided, then a maximum of 10000 items in the folder *basepath* are removed.
+    If *identifier* is not provided, then a maximum of 10000 items in the folder *prefix* are removed.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param basepath: the path specifying the location to delete the item at
+    :param prefix: the path specifying the location to delete the item at
     :param identifier: optional item identifier
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: The number of items successfully removed
     """
@@ -505,8 +505,8 @@ def item_remove(errors: list[str],
         # yes, was the identifier provided ?
         if identifier:
             # yes, remove the item
-            remotepath: Path = Path(basepath) / identifier
-            obj_key: str = remotepath.as_posix()
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
             result += _item_delete(errors=errors,
                                    bucket=bucket,
                                    obj_key=obj_key,
@@ -517,7 +517,7 @@ def item_remove(errors: list[str],
             op_errors: list[str] = []
             items_data: list[dict[str, Any]] = items_list(errors=op_errors,
                                                           bucket=bucket,
-                                                          basepath=basepath,
+                                                          prefix=prefix,
                                                           max_count=10000)
             for item_data in items_data:
                 if op_errors or result >= 10000:
@@ -533,12 +533,12 @@ def item_remove(errors: list[str],
 
 def items_list(errors: list[str],
                bucket: str,
-               basepath: str | Path,
+               prefix: str | Path,
                max_count: int,
                client: BaseClient = None,
                logger: Logger = None) -> list[dict[str, Any]]:
     """
-    Retrieve and return information on a list of items in *basepath*, in the *AWS* store.
+    Retrieve and return information on a list of items in *prefix*, in the *AWS* store.
 
     The information returned by the native invocation is shown below. The *list* returned is the
     value of the *Contents* attribute. Please refer to the published *AWS* documentation
@@ -586,10 +586,9 @@ def items_list(errors: list[str],
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
-    :param bucket: the bucket to use
-    :param basepath: the path specifying the location to iterate from
+    :param prefix: the path specifying the location to retrieve the items from
     :param max_count: the maximum number of items to return
-    :param client: optional MinIO client (obtains a new one, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information on a list of items, or 'None' if error or path not found
     """
@@ -604,16 +603,62 @@ def items_list(errors: list[str],
         # yes, proceed
         try:
             reply: dict[str, Any] = client.list_objects_v2(Bucket=bucket,
-                                                           Prefix=basepath,
+                                                           Prefix=Path(prefix).as_posix(),
                                                            MaxKeys=max_count)
-            result = reply.get("Contents")
+            result = [content for content in reply.get("Contents")
+                      if not content.get("Key").endswith("/")]
             _log(logger=logger,
-                 stmt=f"Listed {basepath}, bucket {bucket}")
+                 stmt=f"Listed {prefix}, bucket {bucket}")
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
                         engine="aws",
                         logger=logger)
+    return result
+
+
+def items_remove(errors: list[str],
+                 bucket: str,
+                 prefix: str | Path,
+                 max_count: int,
+                 client: BaseClient = None,
+                 logger: Logger = None) -> int:
+    """
+    Recursively remove up to *max_count* items in a folder, from the *AWS* store.
+
+    The removal process is aborted if an error occurs.
+
+    :param errors: incidental error messages
+    :param bucket: the bucket to use
+    :param prefix: the path specifying the location to remove the items from
+    :param max_count: the maximum number of items to remove
+    :param client: optional AWS client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: The number of items successfully removed
+    """
+    # initialize the return variable
+    result: int = 0
+
+    # make sure to have a client
+    client = client or get_client(errors=errors,
+                                  logger=logger)
+    # was the client obtained ?
+    if client:
+        # yes, remove the items in the folder
+        op_errors: list[str] = []
+        items_data: list[dict[str, Any]] = items_list(errors=op_errors,
+                                                      bucket=bucket,
+                                                      prefix=prefix,
+                                                      max_count=max_count)
+        for item_data in items_data:
+            if op_errors or result >= max_count:
+                break
+            obj_key: str = item_data.get("Key")
+            result += _item_delete(errors=op_errors,
+                                  bucket=bucket,
+                                  obj_key=obj_key,
+                                  client=client,
+                                   logger=logger)
     return result
 
 
@@ -623,12 +668,12 @@ def _item_delete(errors: list[str],
                  client: BaseClient,
                  logger: Logger) -> int:
     """
-    Delete the item in the *MinIO* store.
+    Delete the item in the *AWS* store.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param obj_key: the item's name, including its path
-    :param client: the MinIO client object
+    :param client: the AWS client object
     :param logger: optional logger
     :return: '1' if the item was deleted, '0' otherwise
     """
