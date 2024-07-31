@@ -589,7 +589,7 @@ def _minio_tags(tags: dict[str, str]) -> Tags:
 
     if tags:
         result = Tags(for_object=True)
-        for key, value in _normalize_tags(tags):
+        for key, value in _normalize_tags(tags).items():
             result[key] = value
 
     return result
