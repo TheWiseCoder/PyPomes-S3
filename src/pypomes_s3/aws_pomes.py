@@ -74,15 +74,18 @@ def startup(errors: list[str],
             client.head_bucket(Bucket=bucket)
             result = True
             _log(logger=logger,
-                 stmt=f"Started AWS, bucket={bucket}")
+                 stmt=f"Started AWS, bucket '{bucket}' asserted")
         except Exception as e1:
-            # log the message and try to create a bucket
+            # log the exception and try to create a bucket
             _except_msg(errors=None,
                         exception=e1,
                         engine="aws",
                         logger=logger)
             try:
                 client.create_bucket(Bucket=bucket)
+                result = True
+                _log(logger=logger,
+                     stmt=f"Started AWS, bucket '{bucket}' created")
             except Exception as e2:
                 _except_msg(errors=errors,
                             exception=e2,
@@ -131,7 +134,7 @@ def data_retrieve(errors: list[str],
                                                       Range=obj_range)
             result = reply["Body"]
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_key}, bucket {bucket}")
+                 stmt=f"Retrieved '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -191,8 +194,8 @@ def data_store(errors: list[str],
                               Key=obj_key,
                               Metadata=_normalize_tags(tags))
             _log(logger=logger,
-                 stmt=(f"Stored {obj_key}, bucket {bucket}, "
-                       f"content type {mimetype}, tags {tags}"))
+                 stmt=(f"Stored '{obj_key}', bucket '{bucket}', "
+                       f"content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             _except_msg(errors=errors,
@@ -238,7 +241,7 @@ def file_retrieve(errors: list[str],
                                           Filename=file_path,
                                           Key=obj_key)
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_key}, bucket {bucket}, to {file_path}")
+                 stmt=f"Retrieved '{obj_key}', bucket '{bucket}', to '{file_path}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -298,8 +301,8 @@ def file_store(errors: list[str],
                                Key=obj_key,
                                ExtraArgs=extra_args)
             _log(logger=logger,
-                 stmt=(f"Stored {obj_key}, bucket {bucket}, "
-                       f"from {file_path}, content type {mimetype}, tags {tags}"))
+                 stmt=(f"Stored '{obj_key}', bucket '{bucket}', "
+                       f"from '{file_path}', content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             _except_msg(errors=errors,
@@ -378,7 +381,7 @@ def item_get_info(errors: list[str],
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key)
             _log(logger=logger,
-                 stmt=f"Got info for {obj_key}, bucket {bucket}")
+                 stmt=f"Got info for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -469,7 +472,7 @@ def item_get_tags(errors: list[str],
                                                            Key=obj_key)
             result = head_info.get("Metadata")
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_key}, bucket {bucket}, tags {result}")
+                 stmt=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -613,7 +616,7 @@ def items_list(errors: list[str],
             result = [content for content in reply.get("Contents")
                       if not content.get("Key").endswith("/")]
             _log(logger=logger,
-                 stmt=f"Listed {prefix}, bucket {bucket}")
+                 stmt=f"Listed '{prefix}', bucket '{bucket}'")
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
@@ -687,7 +690,7 @@ def _item_delete(errors: list[str],
         client.remove_object(Bucket=bucket,
                              Key=obj_key)
         _log(logger=logger,
-             stmt=f"Deleted {obj_key}, bucket {bucket}")
+             stmt=f"Deleted '{obj_key}', bucket '{bucket}'")
         result = 1
     except Exception as e:
         if not hasattr(e, "code") or e.code != "NoSuchKey":

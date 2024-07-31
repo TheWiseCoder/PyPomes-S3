@@ -38,11 +38,14 @@ def startup(errors: list[str],
     if client:
         # yes, proceed
         try:
-            if not client.bucket_exists(bucket_name=bucket):
+            if client.bucket_exists(bucket_name=bucket):
+                action: str = "asserted"
+            else:
                 client.make_bucket(bucket_name=bucket)
+                action: str = "created"
             result = True
             _log(logger=logger,
-                 stmt=f"Started MinIO, bucket={bucket}")
+                 stmt=f"Started MinIO, {action} bucket '{bucket}'")
         except Exception as e:
             _except_msg(errors=errors,
                         exception=e,
@@ -126,7 +129,7 @@ def data_retrieve(errors: list[str],
                                                        length=length)
             result = response.data
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}")
+                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -181,16 +184,17 @@ def data_store(errors: list[str],
             bin_data = BytesIO(data) if isinstance(data, bytes) else \
                        BytesIO(bytes(data, "utf-8"))
             bin_data.seek(0)
+        tags = _minio_tags(tags)
         try:
             client.put_object(bucket_name=bucket,
                               object_name=obj_name,
                               data=bin_data,
                               length=length,
                               content_type=mimetype,
-                              tags=_minio_tags(tags))
+                              tags=tags)
             _log(logger=logger,
-                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
-                          f"content type {mimetype}, tags {tags}"))
+                 stmt=(f"Stored '{obj_name}', bucket '{bucket}', "
+                          f"content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             _except_msg(errors=errors,
@@ -236,7 +240,7 @@ def file_retrieve(errors: list[str],
                                         object_name=obj_name,
                                         file_path=file_path)
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}, to {file_path}")
+                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}', to '{file_path}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -283,15 +287,16 @@ def file_store(errors: list[str],
         file_path: str = Path(filepath).as_posix()
 
         # store the file
+        tags = _minio_tags(tags)
         try:
             client.fput_object(bucket_name=bucket,
                                object_name=obj_name,
                                file_path=file_path,
                                content_type=mimetype,
-                               tags=_minio_tags(tags))
+                               tags=tags)
             _log(logger=logger,
-                 stmt=(f"Stored {obj_name}, bucket {bucket}, "
-                       f"from {file_path}, content type {mimetype}, tags {tags}"))
+                 stmt=(f"Stored '{obj_name}', bucket '{bucket}', "
+                       f"from '{file_path}', content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             _except_msg(errors=errors,
@@ -340,7 +345,7 @@ def item_get_info(errors: list[str],
                                                     object_name=obj_name)
             result = vars(stats)
             _log(logger=logger,
-                 stmt=f"Got info for {obj_name}, bucket {bucket}")
+                 stmt=f"Got info for '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             if hasattr(e, "code") or e.code != "NoSuchKey":
                 result = {}
@@ -391,7 +396,7 @@ def item_get_tags(errors: list[str],
             else:
                 result = {}
             _log(logger=logger,
-                 stmt=f"Retrieved {obj_name}, bucket {bucket}, tags {result}")
+                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 _except_msg(errors=errors,
@@ -570,7 +575,7 @@ def _item_delete(errors: list[str],
         client.remove_object(bucket_name=bucket,
                              object_name=obj_name)
         _log(logger=logger,
-             stmt=f"Removed item {obj_name}, bucket {bucket}")
+             stmt=f"Removed item '{obj_name}', bucket '{bucket}'")
         result = 1
     except Exception as e:
         # SANITY CHECK: in case of concurrent exclusion
