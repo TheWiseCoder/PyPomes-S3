@@ -75,12 +75,17 @@ def startup(errors: list[str],
             result = True
             _log(logger=logger,
                  stmt=f"Started AWS, bucket={bucket}")
-        except:
+        except Exception as e1:
+            # log the message and try to create a bucket
+            _except_msg(errors=None,
+                        exception=e1,
+                        engine="aws",
+                        logger=logger)
             try:
                 client.create_bucket(Bucket=bucket)
-            except Exception as e:
+            except Exception as e2:
                 _except_msg(errors=errors,
-                            exception=e,
+                            exception=e2,
                             engine="aws",
                             logger=logger)
     return result

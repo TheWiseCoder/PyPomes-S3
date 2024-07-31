@@ -110,7 +110,7 @@ def _get_params(engine: str) -> tuple:
             secret_key, secure_access, region_name)
 
 
-def _except_msg(errors: list[str],
+def _except_msg(errors: list[str] | None,
                 exception: Exception,
                 engine: str,
                 logger: Logger) -> None:
@@ -131,7 +131,7 @@ def _except_msg(errors: list[str],
         logger.error(err_msg)
 
 
-def _log(logger: Logger,
+def _log(logger: Logger | None,
          err_msg: str = None,
          level: int = DEBUG,
          errors: list[str] = None,
