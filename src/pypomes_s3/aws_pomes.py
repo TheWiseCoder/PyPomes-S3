@@ -122,12 +122,12 @@ def data_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
         obj_range: str = f"bytes={data_range[0]}-{data_range[1]}" if data_range else None
 
         # retrieve the data
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
             reply: dict[str: Any] = client.get_object(Bucket=bucket,
                                                       Key=obj_key,
                                                       Range=obj_range)
@@ -175,10 +175,6 @@ def data_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
-
-        # store the data
         bin_data: BinaryIO
         if isinstance(data, BinaryIO):
             bin_data = data
@@ -186,7 +182,10 @@ def data_store(errors: list[str],
             bin_data = BytesIO(data) if isinstance(data, bytes) else \
                        BytesIO(bytes(data, "utf-8"))
             bin_data.seek(0)
+
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
             client.put_object(Body=bin_data,
                               Bucket=bucket,
                               ContentType=mimetype,
@@ -232,10 +231,10 @@ def file_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
-        file_path: str = Path(filepath).as_posix()
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
+            file_path: str = Path(filepath).as_posix()
             result = client.download_file(Bucket=bucket,
                                           Filename=file_path,
                                           Key=obj_key)
@@ -282,9 +281,6 @@ def file_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
-        file_path: str = Path(filepath).as_posix()
         extra_args: dict[str, Any] | None = None
         if mimetype or tags:
             extra_args = {}
@@ -295,6 +291,9 @@ def file_store(errors: list[str],
 
         # store the file
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
+            file_path: str = Path(filepath).as_posix()
             client.upload_file(Filename=file_path,
                                Bucket=bucket,
                                Key=obj_key,
@@ -314,14 +313,13 @@ def file_store(errors: list[str],
 def item_get_info(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str = None,
+                  identifier: str,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *AWS* store.
 
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     The information returned is shown below. Please refer to the published *AWS*
     documentation for the meaning of any of these attributes.
     {
@@ -376,11 +374,9 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        if identifier:
-            obj_key: str = (Path(prefix) / identifier).as_posix()
-        else:
-            obj_key: str = Path(prefix).as_posix() + "/"
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key)
             _log(logger=logger,
@@ -397,14 +393,13 @@ def item_get_info(errors: list[str],
 def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str = None,
+                  identifier: str,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *AWS* store.
 
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     If item has no associated metadata tags, an empty *dict* is returned.
     The information returned by the native invocation is shown below. The *dict* returned is the
     value of the *Metadata* attribute. Please refer to the published *AWS* documentation
@@ -469,11 +464,9 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        if identifier:
-            obj_key: str = (Path(prefix) / identifier).as_posix()
-        else:
-            obj_key: str = Path(prefix).as_posix() + "/"
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_key: str = obj_path.as_posix()
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
             result = head_info.get("Metadata")

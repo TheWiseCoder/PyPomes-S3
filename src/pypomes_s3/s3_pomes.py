@@ -542,9 +542,69 @@ def s3_object_store(errors: list[str],
     return result
 
 
+def s3_item_exists(errors: list[str],
+                   prefix: str | Path,
+                   identifier: str = None,
+                   bucket: str = None,
+                   engine: str = None,
+                   client: Any = None,
+                   logger: Logger = None) -> bool:
+    """
+    Determine if a given item exists in the S3 store.
+
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
+    Note that the S3 standard does not allow for empty folders (that is, prefixes not in use by objects).
+
+    :param errors: incidental error messages
+    :param prefix: the path specifying where to locate the item
+    :param identifier: optional item identifier
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param engine: the S3 engine to use (uses the default engine, if not provided)
+    :param client: optional S3 client (obtains a new one, if not provided)
+    :param logger: optional logger
+    :return: 'True' if the item was found, 'False' otherwise, 'None' if error
+    """
+    # initialize the return variable
+    result: bool | None = None
+
+    # initialize the local errors list
+    op_errors: list[str] = []
+
+    # has 'identifier' been specified ?
+    if identifier:
+        # yes, get info about this object
+        item_info: dict[str, Any] = s3_item_get_info(errors=op_errors,
+                                                     bucket=bucket,
+                                                     prefix=prefix,
+                                                     identifier=identifier,
+                                                     engine=engine,
+                                                     client=client,
+                                                     logger=logger)
+        if op_errors:
+            errors.extend(op_errors)
+        else:
+            result = isinstance(item_info, dict) and len(item_info) > 0
+    else:
+        # no, list at most one item in this folder
+        items_data: list[dict[str, Any]] = s3_items_list(errors=op_errors,
+                                                         prefix=prefix,
+                                                         max_count=1,
+                                                         bucket=bucket,
+                                                         engine=engine,
+                                                         client=client,
+                                                         logger=logger)
+        if op_errors:
+            errors.extend(op_errors)
+        else:
+            result = isinstance(items_data, list) and len(items_data) > 0
+
+    return result
+
+
 def s3_item_get_info(errors: list[str],
                      prefix: str | Path,
-                     identifier: str = None,
+                     identifier: str,
                      bucket: str = None,
                      engine: str = None,
                      client: Any = None,
@@ -552,14 +612,13 @@ def s3_item_get_info(errors: list[str],
     """
     Retrieve and return the information about an item in the S3 store.
 
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     The information returned depends on the *engine* in question, and can be viewed
     at the native invocation's *docstring*.
 
     :param errors: incidental error messages
     :param prefix: the path specifying where to locate the item
-    :param identifier: optional item identifier
+    :param identifier: the item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -602,7 +661,7 @@ def s3_item_get_info(errors: list[str],
 
 def s3_item_get_tags(errors: list[str],
                      prefix: str | Path,
-                     identifier: str = None,
+                     identifier: str,
                      bucket: str = None,
                      engine: str = None,
                      client: Any = None,
@@ -610,15 +669,14 @@ def s3_item_get_tags(errors: list[str],
     """
     Retrieve and return the existing metadata tags for an item in the S3 store.
     
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     If item has no associated metadata tags, an empty *dict* is returned.
     The information returned depends on the *engine* in question, and can be viewed
     at the native invocation's *docstring*.
 
     :param errors: incidental error messages
     :param prefix: the path specifying the location to retrieve the item from
-    :param identifier: optional object identifier
+    :param identifier: the object identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -657,40 +715,6 @@ def s3_item_get_tags(errors: list[str],
     errors.extend(op_errors)
 
     return result
-
-
-def s3_item_exists(errors: list[str],
-                   prefix: str | Path,
-                   identifier: str = None,
-                   bucket: str = None,
-                   engine: str = None,
-                   client: Any = None,
-                   logger: Logger = None) -> bool:
-    """
-    Determine if a given item exists in the S3 store.
-
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
-    Note that the S3 standard does not allow for empty folders (that is, prefixes not in use by objects).
-
-    :param errors: incidental error messages
-    :param prefix: the path specifying where to locate the item
-    :param identifier: optional item identifier
-    :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param engine: the S3 engine to use (uses the default engine, if not provided)
-    :param client: optional S3 client (obtains a new one, if not provided)
-    :param logger: optional logger
-    :return: 'True' if the item was found, 'False' otherwise, 'None' if error
-    """
-    item_info: dict[str, Any] = s3_item_get_info(errors=errors,
-                                                 bucket=bucket,
-                                                 prefix=prefix,
-                                                 identifier=identifier,
-                                                 engine=engine,
-                                                 client=client,
-                                                 logger=logger)
-
-    return len(item_info) > 0 if isinstance(item_info, dict) else None
 
 
 def s3_item_remove(errors: list[str],

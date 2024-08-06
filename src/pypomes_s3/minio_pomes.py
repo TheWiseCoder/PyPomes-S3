@@ -116,13 +116,13 @@ def data_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
         offset: int = data_range[0] if data_range else 0
         length: int = data_range[1] - data_range[0] + 1 if data_range else 0
 
         # retrieve the data
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
             response: HTTPResponse = client.get_object(bucket_name=bucket,
                                                        object_name=obj_name,
                                                        offset=offset,
@@ -173,10 +173,6 @@ def data_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
-
-        # store the data
         bin_data: BinaryIO
         if isinstance(data, BinaryIO):
             bin_data = data
@@ -186,6 +182,8 @@ def data_store(errors: list[str],
             bin_data.seek(0)
         tags = _minio_tags(tags)
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
             client.put_object(bucket_name=bucket,
                               object_name=obj_name,
                               data=bin_data,
@@ -232,10 +230,10 @@ def file_retrieve(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
-        file_path: str = Path(filepath).as_posix()
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
+            file_path: str = Path(filepath).as_posix()
             result = client.fget_object(bucket_name=bucket,
                                         object_name=obj_name,
                                         file_path=file_path)
@@ -282,13 +280,11 @@ def file_store(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
-        file_path: str = Path(filepath).as_posix()
-
-        # store the file
         tags = _minio_tags(tags)
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
+            file_path: str = Path(filepath).as_posix()
             client.fput_object(bucket_name=bucket,
                                object_name=obj_name,
                                file_path=file_path,
@@ -309,14 +305,13 @@ def file_store(errors: list[str],
 def item_get_info(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str = None,
+                  identifier: str,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *MinIO* store.
 
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     The information about the item might include:
         - *last_modified*: the date and time the item was last modified
         - *size*: the size of the item in bytes
@@ -327,7 +322,7 @@ def item_get_info(errors: list[str],
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param prefix: the path specifying where to locate the item
-    :param identifier: optional item identifier
+    :param identifier: the item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the item, an empty 'dict' if item not found, or 'None' if error
@@ -341,12 +336,9 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        if identifier:
-            obj_name: str = (Path(prefix) / identifier).as_posix()
-        else:
-            obj_name: str = Path(prefix).as_posix() + "/"
-
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
             stats: MinioObject = client.stat_object(bucket_name=bucket,
                                                     object_name=obj_name)
             result = vars(stats)
@@ -366,14 +358,13 @@ def item_get_info(errors: list[str],
 def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str = None,
+                  identifier: str,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *MinIO* store.
 
-    The item might be interpreted as unspecified data, a file,
-    an object, or, if *identifier* is not provided, a path-specified folder.
+    The item might be interpreted as unspecified data, a file, or an object.
     If item was not found, or has no associated metadata tags, an empty *dict* is returned.
 
     :param errors: incidental error messages
@@ -393,11 +384,9 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        if identifier:
-            obj_name: str = (Path(prefix) / identifier).as_posix()
-        else:
-            obj_name: str = Path(prefix).as_posix() + "/"
         try:
+            obj_path: Path = Path(prefix) / identifier
+            obj_name: str = obj_path.as_posix()
             tags: Tags = client.get_object_tags(bucket_name=bucket,
                                                 object_name=obj_name)
             if tags:
@@ -496,7 +485,7 @@ def items_list(errors: list[str],
             iterator: Iterator = client.list_objects(bucket_name=bucket,
                                                      prefix=obj_path,
                                                      include_user_meta=True,
-                                                     recursive=True)
+                                                     recursive=max_count > 1)
             # traverse 'iterator'
             result = []
             for stats in iterator:
