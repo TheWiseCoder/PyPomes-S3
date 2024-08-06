@@ -1,11 +1,10 @@
 import pickle
 from logging import Logger
 from pathlib import Path
-from pypomes_http import MIMETYPE_BINARY
 from typing import Any, Literal, BinaryIO
 
 from .s3_common import (
-    _S3_ENGINES, _S3_ACCESS_DATA,
+    MIMETYPE_BINARY, _S3_ENGINES, _S3_ACCESS_DATA,
     _assert_engine, _get_param, _except_msg
 )
 
@@ -36,9 +35,9 @@ def s3_setup(engine: Literal["aws", "minio"],
     result: bool = False
 
     # process te parameters
-    if (engine in ["aws", "minio"] and
-        endpoint_url and bucket_name and
-        access_key and secret_key):
+    if engine in ["aws", "minio"] and \
+       endpoint_url and bucket_name and \
+       access_key and secret_key:
         _S3_ACCESS_DATA[engine] = {
             "endpoint-url": endpoint_url,
             "bucket-name": bucket_name,
@@ -545,7 +544,7 @@ def s3_object_store(errors: list[str],
 
 def s3_item_get_info(errors: list[str],
                      prefix: str | Path,
-                     identifier: str,
+                     identifier: str | None,
                      bucket: str = None,
                      engine: str = None,
                      client: Any = None,
@@ -553,13 +552,14 @@ def s3_item_get_info(errors: list[str],
     """
     Retrieve and return the information about an item in the S3 store.
 
-    The item might be unspecified data, a file, or an object.
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     The information returned depends on the *engine* in question, and can be viewed
     at the native invocation's *docstring*.
 
     :param errors: incidental error messages
     :param prefix: the path specifying where to locate the item
-    :param identifier: the item identifier
+    :param identifier: optional item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -602,7 +602,7 @@ def s3_item_get_info(errors: list[str],
 
 def s3_item_get_tags(errors: list[str],
                      prefix: str | Path,
-                     identifier: str,
+                     identifier: str | None,
                      bucket: str = None,
                      engine: str = None,
                      client: Any = None,
@@ -610,14 +610,15 @@ def s3_item_get_tags(errors: list[str],
     """
     Retrieve and return the existing metadata tags for an item in the S3 store.
     
-    The item might be unspecified data, a file, or an object.
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     If item has no associated metadata tags, an empty *dict* is returned.
     The information returned depends on the *engine* in question, and can be viewed
     at the native invocation's *docstring*.
 
     :param errors: incidental error messages
     :param prefix: the path specifying the location to retrieve the item from
-    :param identifier: the object identifier
+    :param identifier: optional object identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -668,7 +669,9 @@ def s3_item_exists(errors: list[str],
     """
     Determine if a given item exists in the S3 store.
 
-    The item might be unspecified data, a file, or an object.
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
+    Note that the S3 standard does not allow for empty folders (that is, prefixes not in use by objects).
 
     :param errors: incidental error messages
     :param prefix: the path specifying where to locate the item
@@ -692,19 +695,20 @@ def s3_item_exists(errors: list[str],
 
 def s3_item_remove(errors: list[str],
                    prefix: str | Path,
-                   identifier: str = None,
+                   identifier: str,
                    bucket: str = None,
                    engine: str = None,
                    client: Any = None,
                    logger: Logger = None) -> int:
     """
-    Remove an item, or items in a folder, from the S3 store.
+    Remove an item from the S3 store.
 
-    If *identifier* is not provided, then a maximum of 10000 items in the folder *prefix* are removed.
+    The item might be interpreted as unspecified data, a file, or an object.
+    To remove items in a given folder, use *s3_items_remove()*, instead.
 
     :param errors: incidental error messages
-    :param prefix: the path specifying the location to retrieve the item from
-    :param identifier: optional item identifier
+    :param prefix: the path specifying the location to remove the item from
+    :param identifier: the item identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
@@ -809,7 +813,7 @@ def s3_items_remove(errors: list[str],
                     client: Any = None,
                     logger: Logger = None) -> int:
     """
-    Recursively remove up to *max_count* items in a folder, from the *MinIO* store.
+    Recursively remove up to *max_count* items in a folder, from the S3 store.
 
     The removal process is aborted if an error occurs.
 

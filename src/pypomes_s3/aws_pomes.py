@@ -3,10 +3,10 @@ from botocore.client import BaseClient
 from io import BytesIO
 from logging import Logger
 from pathlib import Path
-from pypomes_http import MIMETYPE_BINARY
 from typing import Any, BinaryIO
 
 from .s3_common import (
+    MIMETYPE_BINARY,
     _get_param, _get_params, _log, _normalize_tags, _except_msg
 )
 
@@ -125,7 +125,6 @@ def data_retrieve(errors: list[str],
         obj_path: Path = Path(prefix) / identifier
         obj_key: str = obj_path.as_posix()
         obj_range: str = f"bytes={data_range[0]}-{data_range[1]}" if data_range else None
-
 
         # retrieve the data
         try:
@@ -313,14 +312,16 @@ def file_store(errors: list[str],
 
 
 def item_get_info(errors: list[str],
-                  prefix: str | Path,
-                  identifier: str,
                   bucket: str,
+                  prefix: str | Path,
+                  identifier: str = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *AWS* store.
 
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     The information returned is shown below. Please refer to the published *AWS*
     documentation for the meaning of any of these attributes.
     {
@@ -375,8 +376,10 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
+        if identifier:
+            obj_key: str = (Path(prefix) / identifier).as_posix()
+        else:
+            obj_key: str = Path(prefix).as_posix() + "/"
         try:
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key)
@@ -394,13 +397,14 @@ def item_get_info(errors: list[str],
 def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str,
+                  identifier: str = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *AWS* store.
 
-    The item might be unspecified data, a file, or an object.
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     If item has no associated metadata tags, an empty *dict* is returned.
     The information returned by the native invocation is shown below. The *dict* returned is the
     value of the *Metadata* attribute. Please refer to the published *AWS* documentation
@@ -465,8 +469,10 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_key: str = obj_path.as_posix()
+        if identifier:
+            obj_key: str = (Path(prefix) / identifier).as_posix()
+        else:
+            obj_key: str = Path(prefix).as_posix() + "/"
         try:
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
@@ -486,18 +492,19 @@ def item_get_tags(errors: list[str],
 def item_remove(errors: list[str],
                 bucket: str,
                 prefix: str | Path,
-                identifier: str = None,
+                identifier: str,
                 client: BaseClient = None,
                 logger: Logger = None) -> int:
     """
-    Remove an item, or items in a folder, from the *AWS* store.
+    Remove an item from the *AWS* store.
 
-    If *identifier* is not provided, then a maximum of 10000 items in the folder *prefix* are removed.
+    The item might be interpreted as unspecified data, a file, or an object.
+    To remove items in a given folder, use *items_remove()*, instead.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param prefix: the path specifying the location to delete the item at
-    :param identifier: optional item identifier
+    :param identifier: the item identifier
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: The number of items successfully removed
@@ -532,9 +539,9 @@ def item_remove(errors: list[str],
                     break
                 obj_key: str = item_data.get("Key")
                 result += _item_delete(errors=op_errors,
-                                      bucket=bucket,
-                                      obj_key=obj_key,
-                                      client=client,
+                                       bucket=bucket,
+                                       obj_key=obj_key,
+                                       client=client,
                                        logger=logger)
     return result
 
@@ -663,9 +670,9 @@ def items_remove(errors: list[str],
                 break
             obj_key: str = item_data.get("Key")
             result += _item_delete(errors=op_errors,
-                                  bucket=bucket,
-                                  obj_key=obj_key,
-                                  client=client,
+                                   bucket=bucket,
+                                   obj_key=obj_key,
+                                   client=client,
                                    logger=logger)
     return result
 

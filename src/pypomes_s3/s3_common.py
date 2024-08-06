@@ -3,8 +3,11 @@ from pypomes_core import (
     APP_PREFIX,
     env_get_bool, env_get_str, str_sanitize
 )
-from typing import Any, Literal
+from typing import Any, Final, Literal
 from unidecode import unidecode
+
+# no need to import pypomes_http just for this definition
+MIMETYPE_BINARY: Final[str] = "application/ octet-stream"
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
 # - specifying S3 storage parameters with environment variables can be done in two ways:

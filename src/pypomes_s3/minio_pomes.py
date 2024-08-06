@@ -5,11 +5,11 @@ from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
-from pypomes_http import MIMETYPE_BINARY
 from typing import Any, BinaryIO
 from urllib3.response import HTTPResponse
 
 from .s3_common import (
+    MIMETYPE_BINARY,
     _get_param, _get_params, _log, _normalize_tags, _except_msg
 )
 
@@ -194,7 +194,7 @@ def data_store(errors: list[str],
                               tags=tags)
             _log(logger=logger,
                  stmt=(f"Stored '{obj_name}', bucket '{bucket}', "
-                          f"content type '{mimetype}', tags '{tags}'"))
+                       f"content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             _except_msg(errors=errors,
@@ -309,22 +309,25 @@ def file_store(errors: list[str],
 def item_get_info(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str,
+                  identifier: str = None,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *MinIO* store.
 
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     The information about the item might include:
         - *last_modified*: the date and time the item was last modified
         - *size*: the size of the item in bytes
         - *etag*: a hash of the item
         - *is_dir*: a *bool* indicating if the item is a directory
         - *version_id*: the version of the item, if bucket versioning is enabled
+
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param prefix: the path specifying where to locate the item
-    :param identifier: the item identifier
+    :param identifier: optional item identifier
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the item, an empty 'dict' if item not found, or 'None' if error
@@ -338,8 +341,11 @@ def item_get_info(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
+        if identifier:
+            obj_name: str = (Path(prefix) / identifier).as_posix()
+        else:
+            obj_name: str = Path(prefix).as_posix() + "/"
+
         try:
             stats: MinioObject = client.stat_object(bucket_name=bucket,
                                                     object_name=obj_name)
@@ -360,13 +366,14 @@ def item_get_info(errors: list[str],
 def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path,
-                  identifier: str,
+                  identifier: str = None,
                   client: Minio = None,
                   logger: Logger = None) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *MinIO* store.
 
-    The item might be unspecified data, a file, or an object.
+    The item might be interpreted as unspecified data, a file,
+    an object, or, if *identifier* is not provided, a path-specified folder.
     If item was not found, or has no associated metadata tags, an empty *dict* is returned.
 
     :param errors: incidental error messages
@@ -386,8 +393,10 @@ def item_get_tags(errors: list[str],
     # was the client obtained ?
     if client:
         # yes, proceed
-        obj_path: Path = Path(prefix) / identifier
-        obj_name: str = obj_path.as_posix()
+        if identifier:
+            obj_name: str = (Path(prefix) / identifier).as_posix()
+        else:
+            obj_name: str = Path(prefix).as_posix() + "/"
         try:
             tags: Tags = client.get_object_tags(bucket_name=bucket,
                                                 object_name=obj_name)
@@ -409,11 +418,14 @@ def item_get_tags(errors: list[str],
 def item_remove(errors: list[str],
                 bucket: str,
                 prefix: str | Path,
-                identifier: str = None,
+                identifier: str,
                 client: Minio = None,
                 logger: Logger = None) -> int:
     """
     Remove an item from the *MinIO* store.
+
+    The item might be interpreted as unspecified data, a file, or an object.
+    To remove items in a given folder, use *items_remove()*, instead.
 
     :param errors: incidental error messages
     :param bucket: the bucket to use
