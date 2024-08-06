@@ -548,9 +548,10 @@ def items_list(errors: list[str],
     """
     Retrieve and return information on a list of items in *prefix*, in the *AWS* store.
 
-    The information returned by the native invocation is shown below. The *list* returned is the
-    value of the *Contents* attribute. Please refer to the published *AWS* documentation
-    for the meaning of any of these attributes.
+    The first element in the list is the folder indicated in *prefix*.
+    The information returned by the native invocation is shown below.
+    The *list* returned is the value of the *Contents* attribute.
+    Refer to the published *AWS* documentation for the meaning of any of these attributes.
     {
         'IsTruncated': True|False,
         'Contents': [
@@ -613,8 +614,7 @@ def items_list(errors: list[str],
             reply: dict[str, Any] = client.list_objects_v2(Bucket=bucket,
                                                            Prefix=Path(prefix).as_posix(),
                                                            MaxKeys=max_count)
-            result = [content for content in reply.get("Contents")
-                      if not content.get("Key").endswith("/")]
+            result = reply.get("Contents")
             _log(logger=logger,
                  stmt=f"Listed '{prefix}', bucket '{bucket}'")
         except Exception as e:
@@ -661,12 +661,16 @@ def items_remove(errors: list[str],
         for item_data in items_data:
             if op_errors or result >= max_count:
                 break
-            obj_key: str = item_data.get("Key")
-            result += _item_delete(errors=op_errors,
-                                   bucket=bucket,
-                                   obj_key=obj_key,
-                                   client=client,
-                                   logger=logger)
+            # skip item, if it is a folder
+            if item_data.get("Key").endswith("/"):
+                result += 1
+            else:
+                obj_key: str = item_data.get("Key")
+                result += _item_delete(errors=op_errors,
+                                       bucket=bucket,
+                                       obj_key=obj_key,
+                                       client=client,
+                                       logger=logger)
     return result
 
 

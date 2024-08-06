@@ -784,7 +784,8 @@ def s3_items_list(errors: list[str],
     Retrieve and return information on a list of items in *prefix*, in the S3 store.
 
     The information returned depends on the *engine* in question, and can be viewed
-    at the native invocation's *docstring*.
+    at the native invocation's *docstring*. The first element in the list is the
+    folder indicated in *prefix*.
 
     :param errors: incidental error messages
     :param prefix: the path specifying the location to iterate from

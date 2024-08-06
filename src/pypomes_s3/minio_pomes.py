@@ -454,6 +454,7 @@ def items_list(errors: list[str],
     """
     Recursively retrieve and return information on a list of items in *prefix*, in the *MinIO* store.
 
+    The first element in the list is the folder indicated in *prefix*.
     The information about each item might include:
         - *last_modified*: the date and time the item was last modified
         - *size*: the size of the item in bytes
@@ -489,12 +490,10 @@ def items_list(errors: list[str],
             # traverse 'iterator'
             result = []
             for stats in iterator:
-                # skip item if it is a folder
-                if not hasattr(stats, "is_dir") or not stats.is_dir:
-                    result.append(vars(stats))
-                    count += 1
-                    if count >= max_count:
-                        break
+                result.append(vars(stats))
+                count += 1
+                if count >= max_count:
+                    break
 
             # log the results
             _log(logger=logger,
@@ -545,12 +544,16 @@ def items_remove(errors: list[str],
         for item_data in items_data:
             if op_errors or result >= max_count:
                 break
-            obj_name: str = item_data.get("key")
-            result += _item_delete(errors=op_errors,
-                                   bucket=bucket,
-                                   obj_name=obj_name,
-                                   client=client,
-                                   logger=logger)
+            # skip item, if it is a folder
+            if hasattr(items_data, "is_dir") and items_data.is_dir:
+                result += 1
+            else:
+                obj_name: str = item_data.get("key")
+                result += _item_delete(errors=op_errors,
+                                       bucket=bucket,
+                                       obj_name=obj_name,
+                                       client=client,
+                                       logger=logger)
     return result
 
 
