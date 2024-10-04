@@ -10,7 +10,7 @@ from urllib3.response import HTTPResponse
 
 from .s3_common import (
     MIMETYPE_BINARY,
-    _get_param, _get_params, _log, _normalize_tags, _except_msg
+    _get_param, _get_params, _normalize_tags, _except_msg
 )
 
 
@@ -44,13 +44,11 @@ def startup(errors: list[str],
                 client.make_bucket(bucket_name=bucket)
                 action: str = "created"
             result = True
-            _log(logger=logger,
-                 stmt=f"Started MinIO, {action} bucket '{bucket}'")
+            if logger:
+                logger.debug(msg=f"Started MinIO, {action} bucket '{bucket}'")
         except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 
@@ -77,14 +75,12 @@ def get_client(errors: list[str],
                        endpoint=endpoint_url,
                        secure=secure_access,
                        region=region_name)
-        _log(logger=logger,
-             stmt="Minio client created")
+        if logger:
+            logger.debug(msg="Minio client created")
 
     except Exception as e:
-        _except_msg(errors=errors,
-                    exception=e,
-                    engine="minio",
-                    logger=logger)
+        errors.append(_except_msg(exception=e,
+                                  engine="minio"))
     return result
 
 
@@ -128,14 +124,12 @@ def data_retrieve(errors: list[str],
                                                        offset=offset,
                                                        length=length)
             result = response.data
-            _log(logger=logger,
-                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}'")
+            if logger:
+                logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
+                errors.append(_except_msg(exception=e,
+                                          engine="minio"))
     return result
 
 
@@ -190,15 +184,13 @@ def data_store(errors: list[str],
                               length=length,
                               content_type=mimetype,
                               tags=tags)
-            _log(logger=logger,
-                 stmt=(f"Stored '{obj_name}', bucket '{bucket}', "
-                       f"content type '{mimetype}', tags '{tags}'"))
+            if logger:
+                logger.debug(msg=(f"Stored '{obj_name}', bucket '{bucket}', "
+                                  f"content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 
@@ -237,14 +229,12 @@ def file_retrieve(errors: list[str],
             result = client.fget_object(bucket_name=bucket,
                                         object_name=obj_name,
                                         file_path=file_path)
-            _log(logger=logger,
-                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}', to '{file_path}'")
+            if logger:
+                logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}', to '{file_path}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
+                errors.append(_except_msg(exception=e,
+                                          engine="minio"))
     return result
 
 
@@ -290,15 +280,13 @@ def file_store(errors: list[str],
                                file_path=file_path,
                                content_type=mimetype,
                                tags=tags)
-            _log(logger=logger,
-                 stmt=(f"Stored '{obj_name}', bucket '{bucket}', "
-                       f"from '{file_path}', content type '{mimetype}', tags '{tags}'"))
+            if logger:
+                logger.debug(msg=(f"Stored '{obj_name}', bucket '{bucket}', "
+                                  f"from '{file_path}', content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 
@@ -342,16 +330,14 @@ def item_get_info(errors: list[str],
             stats: MinioObject = client.stat_object(bucket_name=bucket,
                                                     object_name=obj_name)
             result = vars(stats)
-            _log(logger=logger,
-                 stmt=f"Got info for '{obj_name}', bucket '{bucket}'")
+            if logger:
+                logger.debug(msg=f"Got info for '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             if hasattr(e, "code") or e.code != "NoSuchKey":
                 result = {}
             else:
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
+                errors.append(_except_msg(exception=e,
+                                          engine="minio"))
     return result
 
 
@@ -393,14 +379,12 @@ def item_get_tags(errors: list[str],
                 result = {key: value for key, value in tags.items()}
             else:
                 result = {}
-            _log(logger=logger,
-                 stmt=f"Retrieved '{obj_name}', bucket '{bucket}', tags '{result}'")
+            if logger:
+                logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
-                _except_msg(errors=errors,
-                            exception=e,
-                            engine="minio",
-                            logger=logger)
+                errors.append(_except_msg(exception=e,
+                                          engine="minio"))
     return result
 
 
@@ -496,13 +480,11 @@ def items_list(errors: list[str],
                     break
 
             # log the results
-            _log(logger=logger,
-                 stmt=f"Listed {count} items in '{prefix}', bucket '{bucket}'")
+            if logger:
+                logger.debug(msg=f"Listed {count} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 
@@ -578,16 +560,14 @@ def _item_delete(errors: list[str],
     try:
         client.remove_object(bucket_name=bucket,
                              object_name=obj_name)
-        _log(logger=logger,
-             stmt=f"Removed item '{obj_name}', bucket '{bucket}'")
+        if logger:
+            logger.debug(msg=f"Removed item '{obj_name}', bucket '{bucket}'")
         result = 1
     except Exception as e:
         # SANITY CHECK: in case of concurrent exclusion
         if not hasattr(e, "code") or e.code != "NoSuchKey":
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 

@@ -1,4 +1,3 @@
-from logging import DEBUG, Logger
 from pypomes_core import (
     APP_PREFIX,
     env_get_bool, env_get_str, str_sanitize
@@ -113,48 +112,17 @@ def _get_params(engine: str) -> tuple:
             secret_key, secure_access, region_name)
 
 
-def _except_msg(errors: list[str] | None,
-                exception: Exception,
-                engine: str,
-                logger: Logger) -> None:
+def _except_msg(exception: Exception,
+                engine: str) -> str:
     """
-    Format and log the error message corresponding to the exception raised while accessing the S3 store.
+    Format and return the error message corresponding to the exception raised while accessing the S3 store.
 
-    :param errors: incidental error messages
     :param exception: the exception raised
-    :param logger: the logger object
     :param engine: the reference database engine
     :return: the formatted error message
     """
     endpoint: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
-    err_msg: str = f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
-    if isinstance(errors, list):
-        errors.append(err_msg)
-    if logger:
-        logger.error(err_msg)
-
-
-def _log(logger: Logger | None,
-         err_msg: str = None,
-         level: int = DEBUG,
-         errors: list[str] = None,
-         stmt: str = None) -> None:
-    """
-    Log *err_msg* and add it to *errors*, or else log *stmt*, whichever is applicable.
-
-    :param logger: the logger object
-    :param err_msg: the error message to log
-    :param level: log level (defaults to DEBUG)
-    :param errors: optional incidental errors
-    :param stmt: optional statement
-    """
-    if err_msg:
-        if logger:
-            logger.log(level, err_msg)
-        if isinstance(errors, list):
-            errors.append(err_msg)
-    if logger and stmt:
-        logger.log(level, stmt)
+    return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
 
 
 def _normalize_tags(tags: dict[str, str]) -> dict[str, str]:

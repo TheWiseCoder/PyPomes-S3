@@ -71,7 +71,7 @@ def s3_get_param(key: Literal["endpoint-url", "bucket-name", "access-key",
     """
     Return the connection parameter value for *key*.
 
-    The connection key should be one of *endpoint-url*, *bucket-name", *access-key*, and *secret-key*.
+    The connection key should be one of *endpoint-url*, *bucket-name*, *access-key*, and *secret-key*.
     For *aws* and *minio* engines, the extra keys *region-name* and *secure-access* are added to this list,
     respectively.
 
@@ -482,10 +482,8 @@ def s3_object_retrieve(errors: list[str],
         try:
             result = pickle.loads(data)
         except Exception as e:
-            _except_msg(errors=errors,
-                        exception=e,
-                        engine="minio",
-                        logger=logger)
+            errors.append(_except_msg(exception=e,
+                                      engine="minio"))
     return result
 
 
@@ -520,10 +518,8 @@ def s3_object_store(errors: list[str],
     try:
         data = pickle.dumps(obj=obj)
     except Exception as e:
-        _except_msg(errors=errors,
-                    exception=e,
-                    engine="aws",
-                    logger=logger)
+        errors.append(_except_msg(exception=e,
+                                  engine="minio"))
 
     # was the data obtained ?
     if data:
