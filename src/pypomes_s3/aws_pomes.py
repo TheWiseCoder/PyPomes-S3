@@ -89,9 +89,9 @@ def startup(errors: list[str],
 
 
 def data_retrieve(errors: list[str],
-                  bucket: str,
-                  prefix: str | Path,
                   identifier: str,
+                  bucket: str,
+                  prefix: str | Path = None,
                   data_range: tuple[int, int] = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> bytes:
@@ -99,9 +99,9 @@ def data_retrieve(errors: list[str],
     Retrieve data from the *AWS* store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to retrieve the data from
     :param identifier: the data identifier
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to retrieve the data from
     :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -120,8 +120,11 @@ def data_retrieve(errors: list[str],
 
         # retrieve the data
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             reply: dict[str: Any] = client.get_object(Bucket=bucket,
                                                       Key=obj_key,
                                                       Range=obj_range)
@@ -136,10 +139,10 @@ def data_retrieve(errors: list[str],
 
 
 def data_store(errors: list[str],
-               bucket: str,
-               prefix: str | Path,
                identifier: str,
                data: bytes | str | BinaryIO,
+               bucket: str,
+               prefix: str | Path = None,
                mimetype: str = MIMETYPE_BINARY,
                tags: dict[str, str] = None,
                client: BaseClient = None,
@@ -148,10 +151,10 @@ def data_store(errors: list[str],
     Store *data* at the *AWS* store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to store the file at
     :param identifier: the data identifier
     :param data: the data to store
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to store the file at
     :param mimetype: the data mimetype
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
@@ -176,8 +179,11 @@ def data_store(errors: list[str],
             bin_data.seek(0)
 
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             client.put_object(Body=bin_data,
                               Bucket=bucket,
                               ContentType=mimetype,
@@ -194,20 +200,20 @@ def data_store(errors: list[str],
 
 
 def file_retrieve(errors: list[str],
-                  prefix: str | Path,
                   identifier: str,
                   filepath: Path | str,
                   bucket: str,
+                  prefix: str | Path = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> Any:
     """
     Retrieve a file from the *AWS* store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to retrieve the file from
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to retrieve the file from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the file retrieved, or 'None' if error or file not found
@@ -222,8 +228,11 @@ def file_retrieve(errors: list[str],
     if client:
         # yes, proceed
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             file_path: str = Path(filepath).as_posix()
             result = client.download_file(Bucket=bucket,
                                           Filename=file_path,
@@ -238,11 +247,11 @@ def file_retrieve(errors: list[str],
 
 
 def file_store(errors: list[str],
-               bucket: str,
-               prefix: str | Path,
                identifier: str,
                filepath: Path | str,
                mimetype: str,
+               bucket: str,
+               prefix: str | Path = None,
                tags: dict[str, str] = None,
                client: BaseClient = None,
                logger: Logger = None) -> bool:
@@ -250,11 +259,11 @@ def file_store(errors: list[str],
     Store a file at the *AWS* store.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to store the file at
     :param identifier: the file identifier, tipically a file name
-    :param filepath: the path specifying where the file is
+    :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to store the file at
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
@@ -279,8 +288,11 @@ def file_store(errors: list[str],
 
         # store the file
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             file_path: str = Path(filepath).as_posix()
             client.upload_file(Filename=file_path,
                                Bucket=bucket,
@@ -297,9 +309,9 @@ def file_store(errors: list[str],
 
 
 def item_get_info(errors: list[str],
-                  bucket: str,
-                  prefix: str | Path,
                   identifier: str,
+                  bucket: str,
+                  prefix: str | Path = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, Any]:
     """
@@ -344,9 +356,9 @@ def item_get_info(errors: list[str],
     }
 
     :param errors: incidental error messages
-    :param prefix: the path specifying where to locate the item
     :param identifier: the item identifier
     :param bucket: the bucket to use
+    :param prefix: optional path specifying where to locate the item
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information about the item, or 'None' if error or item not found
@@ -361,8 +373,11 @@ def item_get_info(errors: list[str],
     if client:
         # yes, proceed
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key)
             if logger:
@@ -375,9 +390,9 @@ def item_get_info(errors: list[str],
 
 
 def item_get_tags(errors: list[str],
-                  bucket: str,
-                  prefix: str | Path,
                   identifier: str,
+                  bucket: str,
+                  prefix: str | Path = None,
                   client: BaseClient = None,
                   logger: Logger = None) -> dict[str, str]:
     """
@@ -430,9 +445,9 @@ def item_get_tags(errors: list[str],
     }
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to retrieve the item from
     :param identifier: the object identifier
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to retrieve the item from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: the metadata tags associated with the item, or 'None' if error or item not found
@@ -449,8 +464,11 @@ def item_get_tags(errors: list[str],
     if client:
         # yes, proceed
         try:
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
             result = head_info.get("Metadata")
@@ -465,9 +483,9 @@ def item_get_tags(errors: list[str],
 
 
 def item_remove(errors: list[str],
-                bucket: str,
-                prefix: str | Path,
                 identifier: str,
+                bucket: str,
+                prefix: str | Path = None,
                 client: BaseClient = None,
                 logger: Logger = None) -> int:
     """
@@ -477,9 +495,9 @@ def item_remove(errors: list[str],
     To remove items in a given folder, use *items_remove()*, instead.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to delete the item at
     :param identifier: the item identifier
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to delete the item at
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: The number of items successfully removed
@@ -495,8 +513,11 @@ def item_remove(errors: list[str],
         # yes, was the identifier provided ?
         if identifier:
             # yes, remove the item
-            obj_path: Path = Path(prefix) / identifier
-            obj_key: str = obj_path.as_posix()
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_key: str = obj_path.as_posix()
+            else:
+                obj_key: str = identifier
             result += _item_delete(errors=errors,
                                    bucket=bucket,
                                    obj_key=obj_key,
@@ -506,9 +527,9 @@ def item_remove(errors: list[str],
             # no, remove the items in the folder
             op_errors: list[str] = []
             items_data: list[dict[str, Any]] = items_list(errors=op_errors,
+                                                          max_count=10000,
                                                           bucket=bucket,
-                                                          prefix=prefix,
-                                                          max_count=10000)
+                                                          prefix=prefix)
             for item_data in items_data:
                 if op_errors or result >= 10000:
                     break
@@ -522,9 +543,9 @@ def item_remove(errors: list[str],
 
 
 def items_list(errors: list[str],
-               bucket: str,
-               prefix: str | Path,
                max_count: int,
+               bucket: str,
+               prefix: str | Path = None,
                client: BaseClient = None,
                logger: Logger = None) -> list[dict[str, Any]]:
     """
@@ -576,9 +597,9 @@ def items_list(errors: list[str],
     }
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to retrieve the items from
     :param max_count: the maximum number of items to return
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to retrieve the items from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: information on a list of items, or 'None' if error or path not found
@@ -594,7 +615,7 @@ def items_list(errors: list[str],
         # yes, proceed
         try:
             reply: dict[str, Any] = client.list_objects_v2(Bucket=bucket,
-                                                           Prefix=Path(prefix).as_posix(),
+                                                           Prefix=Path(prefix).as_posix() if prefix else None,
                                                            MaxKeys=max_count)
             result = reply.get("Contents")
             if logger:
@@ -606,9 +627,9 @@ def items_list(errors: list[str],
 
 
 def items_remove(errors: list[str],
-                 bucket: str,
-                 prefix: str | Path,
                  max_count: int,
+                 bucket: str,
+                 prefix: str | Path = None,
                  client: BaseClient = None,
                  logger: Logger = None) -> int:
     """
@@ -617,9 +638,9 @@ def items_remove(errors: list[str],
     The removal process is aborted if an error occurs.
 
     :param errors: incidental error messages
-    :param bucket: the bucket to use
-    :param prefix: the path specifying the location to remove the items from
     :param max_count: the maximum number of items to remove
+    :param bucket: the bucket to use
+    :param prefix: optional path specifying the location to remove the items from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
     :return: The number of items successfully removed
@@ -635,9 +656,9 @@ def items_remove(errors: list[str],
         # yes, remove the items in the folder
         op_errors: list[str] = []
         items_data: list[dict[str, Any]] = items_list(errors=op_errors,
+                                                      max_count=max_count,
                                                       bucket=bucket,
-                                                      prefix=prefix,
-                                                      max_count=max_count)
+                                                      prefix=prefix)
         for item_data in items_data:
             if op_errors or result >= max_count:
                 break
