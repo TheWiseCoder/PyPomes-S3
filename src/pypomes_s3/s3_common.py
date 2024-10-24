@@ -1,12 +1,28 @@
 from pypomes_core import (
     APP_PREFIX,
-    env_get_bool, env_get_str, str_sanitize
+    env_get_bool, env_get_str, env_get_strs, str_sanitize
 )
-from typing import Any, Final, Literal
+from enum import StrEnum, auto
+from typing import Any, Final
 from unidecode import unidecode
 
-# no need to import pypomes_http just for this definition
+# no need to import 'pypomes_http' just for this definition
 MIMETYPE_BINARY: Final[str] = "application/ octet-stream"
+
+
+class S3Engine(StrEnum):
+    AWS = auto()
+    MINIO = auto()
+
+
+class S3Param(StrEnum):
+    ENDPOINT_URL = auto()
+    BUCKET_NAME = auto()
+    ACCESS_KEY = auto()
+    SECRET_KEY = auto()
+    SECURE_ACCESS = auto()
+    REGION_NAME = auto()
+
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
 # - specifying S3 storage parameters with environment variables can be done in two ways:
@@ -23,36 +39,39 @@ MIMETYPE_BINARY: Final[str] = "application/ octet-stream"
 #     and, for each engine, specify the set above, replacing 'S3' with
 #     'AWS' and 'MINIO', respectively, for the engines listed
 
-_S3_ACCESS_DATA: dict = {}
-_S3_ENGINES: list[str] = []
+_S3_ACCESS_DATA: dict[S3Engine, dict[S3Param, Any]] = {}
+_S3_ENGINES: list[S3Engine] = []
 
-_prefix: str = env_get_str(f"{APP_PREFIX}_S3_ENGINE",  None)
-if _prefix:
+_engine: str = env_get_str(key=f"{APP_PREFIX}_S3_ENGINE",
+                           values=list(map(str, S3Engine)))
+if _engine:
     _default_setup: bool = True
-    _S3_ENGINES.append(_prefix)
+    _S3_ENGINES.append(S3Engine(_engine))
 else:
     _default_setup: bool = False
-    _engines: str = env_get_str(f"{APP_PREFIX}_S3_ENGINES", None)
+    _engines: list[str] = env_get_strs(key=f"{APP_PREFIX}_S3_ENGINES",
+                                       values=list(map(str, S3Engine)))
     if _engines:
-        _S3_ENGINES.extend(_engines.split(sep=","))
-for engine in _S3_ENGINES:
+        _S3_ENGINES.extend([S3Engine(v) for v in _engines])
+for _s3_engine in _S3_ENGINES:
     if _default_setup:
         _tag = "S3"
         _default_setup = False
     else:
-        _tag = engine.upper()
-    _S3_ACCESS_DATA[engine] = {
-        "endpoint-url": env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
-        "bucket-name": env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
-        "access-key":  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        "secret-key": env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
-        "secure-access": env_get_bool(f"{APP_PREFIX}_{_tag}_SECURE_ACCESS"),
-        "region-name": env_get_str(f"{APP_PREFIX}_{_tag}_REGION_NAME")
+        _tag = _s3_engine.upper()
+    # noinspection PyTypeChecker
+    _S3_ACCESS_DATA[_s3_engine] = {
+        S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
+        S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
+        S3Param.ACCESS_KEY:  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
+        S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
+        S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{_tag}_SECURE_ACCESS"),
+        S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_REGION_NAME")
     }
 
 
 def _assert_engine(errors: list[str],
-                   engine: str) -> str:
+                   engine: S3Engine) -> S3Engine:
     """
     Verify if *engine* is in the list of supported engines.
 
@@ -64,7 +83,7 @@ def _assert_engine(errors: list[str],
     :return: the validated or default engine
     """
     # initialize the return valiable
-    result: str | None = None
+    result: S3Engine | None = None
 
     if not engine and _S3_ENGINES:
         result = _S3_ENGINES[0]
@@ -77,9 +96,8 @@ def _assert_engine(errors: list[str],
     return result
 
 
-def _get_param(engine: str,
-               param: Literal["endpoint-url", "bucket-name", "access-key",
-                              "secret-key", "region-name", "secure-access"]) -> Any:
+def _get_param(engine: S3Engine,
+               param: S3Param) -> Any:
     """
     Return the current value of *param* being used by *engine*.
 
@@ -87,33 +105,21 @@ def _get_param(engine: str,
     :param param: the reference parameter
     :return: the parameter's current value
     """
-    return _S3_ACCESS_DATA[engine].get(param)
+    return (_S3_ACCESS_DATA.get(engine) or {}).get(param)
 
 
-def _get_params(engine: str) -> tuple:
+def _get_params(engine: S3Engine) -> dict[S3Param, Any]:
     """
     Return the current parameters being used for *engine*.
-
-    The parameters are returned as a *tuple*, with the elements *endpoint-url*,
-    *bucket-name*, *access-key*, *secret-key*, *secure-access*, and *region-name*.
-    The meaning of some parameters may vary between different S3 engines.
 
     :param engine: the reference database engine
     :return: the current parameters for the engine
     """
-    endpoint_url: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
-    bucket_name: str = _S3_ACCESS_DATA[engine].get("bucket-name")
-    access_key: str = _S3_ACCESS_DATA[engine].get("access-key")
-    secret_key: str = _S3_ACCESS_DATA[engine].get("secret-key")
-    secure_access: bool = _S3_ACCESS_DATA[engine].get("secure-access")
-    region_name: str = _S3_ACCESS_DATA[engine].get("region-name")
-
-    return (endpoint_url, bucket_name, access_key,
-            secret_key, secure_access, region_name)
+    return _S3_ACCESS_DATA.get(engine)
 
 
 def _except_msg(exception: Exception,
-                engine: str) -> str:
+                engine: S3Engine) -> str:
     """
     Format and return the error message corresponding to the exception raised while accessing the S3 store.
 
@@ -121,7 +127,8 @@ def _except_msg(exception: Exception,
     :param engine: the reference database engine
     :return: the formatted error message
     """
-    endpoint: str = _S3_ACCESS_DATA[engine].get("endpoint-url")
+    # noinspection PyTypeChecker
+    endpoint: str = (_S3_ACCESS_DATA.get(engine) or {}).get(S3Param.ENDPOINT_URL)
     return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
 
 

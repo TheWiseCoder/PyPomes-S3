@@ -1,3 +1,6 @@
+from .s3_common import (
+    S3Engine, S3Param
+)
 from .s3_pomes import (
     s3_setup, s3_get_engines,
     s3_get_param, s3_get_params,
@@ -11,6 +14,8 @@ from .s3_pomes import (
 )
 
 __all__ = [
+    # s3_common
+    "S3Engine", "S3Param",
     # s3_pomes
     "s3_setup", "s3_get_engines",
     "s3_get_param", "s3_get_params",

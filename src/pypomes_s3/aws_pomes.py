@@ -7,7 +7,7 @@ from typing import Any, BinaryIO
 
 from .s3_common import (
     MIMETYPE_BINARY,
-    _get_param, _get_params, _normalize_tags, _except_msg
+    S3Engine, _get_param, _get_params, _normalize_tags, _except_msg, S3Param
 )
 
 
@@ -24,24 +24,23 @@ def get_client(errors: list[str],
     result: BaseClient | None = None
 
     # retrieve the access parameters
-    (endpoint_url, bucket_name, access_key,
-     secret_key, secure_access, region_name) = _get_params("aws")
+    aws_params: dict[S3Param, Any] = _get_params(engine=S3Engine.AWS)
 
     # obtain the AWS client
     try:
         result = boto3.client(service_name="s3",
-                              region_name=region_name,
-                              use_ssl=secure_access,
+                              region_name=aws_params.get(S3Param.REGION_NAME),
+                              use_ssl=aws_params.get(S3Param.SECURE_ACCESS),
                               verify=False,
-                              endpoint_url=endpoint_url,
-                              aws_access_key_id=access_key,
-                              aws_secret_access_key=secret_key)
+                              endpoint_url=aws_params.get(S3Param.ENDPOINT_URL),
+                              aws_access_key_id=aws_params.get(S3Param.ACCESS_KEY),
+                              aws_secret_access_key=aws_params.get(S3Param.SECRET_KEY))
         if logger:
             logger.debug(msg="AWS client created")
 
     except Exception as e:
         errors.append(_except_msg(exception=e,
-                                  engine="aws"))
+                                  engine=S3Engine.AWS))
     return result
 
 
@@ -76,7 +75,7 @@ def startup(errors: list[str],
         except Exception as e1:
             # log the exception and try to create a bucket
             errors.append(_except_msg(exception=e1,
-                                      engine="aws"))
+                                      engine=S3Engine.AWS))
             try:
                 client.create_bucket(Bucket=bucket)
                 result = True
@@ -84,7 +83,7 @@ def startup(errors: list[str],
                     logger.debug(msg=f"Started AWS, bucket '{bucket}' created")
             except Exception as e2:
                 errors.append(_except_msg(exception=e2,
-                                          engine="aws"))
+                                          engine=S3Engine.AWS))
     return result
 
 
@@ -134,7 +133,7 @@ def data_retrieve(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="aws"))
+                                          engine=S3Engine.AWS))
     return result
 
 
@@ -195,7 +194,7 @@ def data_store(errors: list[str],
             result = True
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="aws"))
+                                      engine=S3Engine.AWS))
     return result
 
 
@@ -242,7 +241,7 @@ def file_retrieve(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="aws"))
+                                          engine=S3Engine.AWS))
     return result
 
 
@@ -304,7 +303,7 @@ def file_store(errors: list[str],
             result = True
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="aws"))
+                                      engine=S3Engine.AWS))
     return result
 
 
@@ -385,7 +384,7 @@ def item_get_info(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="aws"))
+                                          engine=S3Engine.AWS))
     return result
 
 
@@ -458,8 +457,8 @@ def item_get_tags(errors: list[str],
     # make sure to have a client
     client = client or get_client(errors=errors,
                                   logger=logger)
-    bucket = bucket or _get_param(engine="aws",
-                                  param="bucket-name")
+    bucket = bucket or _get_param(engine=S3Engine.AWS,
+                                  param=S3Param.BUCKET_NAME)
     # was the client obtained ?
     if client:
         # yes, proceed
@@ -477,7 +476,7 @@ def item_get_tags(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="aws"))
+                                          engine=S3Engine.AWS))
 
     return result
 
@@ -622,7 +621,7 @@ def items_list(errors: list[str],
                 logger.debug(msg=f"Listed '{prefix}', bucket '{bucket}'")
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="aws"))
+                                      engine=S3Engine.AWS))
     return result
 
 
@@ -700,5 +699,5 @@ def _item_delete(errors: list[str],
     except Exception as e:
         if not hasattr(e, "code") or e.code != "NoSuchKey":
             errors.append(_except_msg(exception=e,
-                                      engine="aws"))
+                                      engine=S3Engine.AWS))
     return result

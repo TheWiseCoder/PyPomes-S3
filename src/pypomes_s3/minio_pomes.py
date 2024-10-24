@@ -10,7 +10,7 @@ from urllib3.response import HTTPResponse
 
 from .s3_common import (
     MIMETYPE_BINARY,
-    _get_param, _get_params, _normalize_tags, _except_msg
+    S3Engine, S3Param, _get_param, _get_params, _normalize_tags, _except_msg
 )
 
 
@@ -48,7 +48,7 @@ def startup(errors: list[str],
                 logger.debug(msg=f"Started MinIO, {action} bucket '{bucket}'")
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="minio"))
+                                      engine=S3Engine.MINIO))
     return result
 
 
@@ -65,22 +65,21 @@ def get_client(errors: list[str],
     result: Minio | None = None
 
     # retrieve the access parameters
-    (endpoint_url, _bucket_name, access_key,
-     secret_key, secure_access, region_name) = _get_params("minio")
+    minio_params: dict[S3Param, Any] = _get_params(engine=S3Engine.MINIO)
 
     # obtain the MinIO client
     try:
-        result = Minio(access_key=access_key,
-                       secret_key=secret_key,
-                       endpoint=endpoint_url,
-                       secure=secure_access,
-                       region=region_name)
+        result = Minio(access_key=minio_params.get(S3Param.ACCESS_KEY),
+                       secret_key=minio_params.get(S3Param.SECRET_KEY),
+                       endpoint=minio_params.get(S3Param.ENDPOINT_URL),
+                       secure=minio_params.get(S3Param.SECURE_ACCESS),
+                       region=minio_params.get(S3Param.REGION_NAME))
         if logger:
             logger.debug(msg="Minio client created")
 
     except Exception as e:
         errors.append(_except_msg(exception=e,
-                                  engine="minio"))
+                                  engine=S3Engine.MINIO))
     return result
 
 
@@ -132,7 +131,7 @@ def data_retrieve(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="minio"))
+                                          engine=S3Engine.MINIO))
     return result
 
 
@@ -196,7 +195,7 @@ def data_store(errors: list[str],
             result = True
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="minio"))
+                                      engine=S3Engine.MINIO))
     return result
 
 
@@ -243,7 +242,7 @@ def file_retrieve(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="minio"))
+                                          engine=S3Engine.MINIO))
     return result
 
 
@@ -298,7 +297,7 @@ def file_store(errors: list[str],
             result = True
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="minio"))
+                                      engine=S3Engine.MINIO))
     return result
 
 
@@ -352,7 +351,7 @@ def item_get_info(errors: list[str],
                 result = {}
             else:
                 errors.append(_except_msg(exception=e,
-                                          engine="minio"))
+                                          engine=S3Engine.MINIO))
     return result
 
 
@@ -402,7 +401,7 @@ def item_get_tags(errors: list[str],
         except Exception as e:
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
-                                          engine="minio"))
+                                          engine=S3Engine.MINIO))
     return result
 
 
@@ -432,8 +431,8 @@ def item_remove(errors: list[str],
     # make sure to have a client
     client = client or get_client(errors=errors,
                                   logger=logger)
-    bucket = bucket or _get_param(engine="minio",
-                                  param="bucket-name")
+    bucket = bucket or _get_param(engine=S3Engine.MINIO,
+                                  param=S3Param.BUCKET_NAME)
     # was the client obtained ?
     if client:
         # yes, remove the item
@@ -502,7 +501,7 @@ def items_list(errors: list[str],
                 logger.debug(msg=f"Listed {count} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             errors.append(_except_msg(exception=e,
-                                      engine="minio"))
+                                      engine=S3Engine.MINIO))
     return result
 
 
@@ -531,8 +530,8 @@ def items_remove(errors: list[str],
     # make sure to have a client
     client = client or get_client(errors=errors,
                                   logger=logger)
-    bucket = bucket or _get_param(engine="minio",
-                                  param="bucket-name")
+    bucket = bucket or _get_param(engine=S3Engine.MINIO,
+                                  param=S3Param.BUCKET_NAME)
     # was the client obtained ?
     if client:
         # remove items in the folder
@@ -585,7 +584,7 @@ def _item_delete(errors: list[str],
         # SANITY CHECK: in case of concurrent exclusion
         if not hasattr(e, "code") or e.code != "NoSuchKey":
             errors.append(_except_msg(exception=e,
-                                      engine="minio"))
+                                      engine=S3Engine.MINIO))
     return result
 
 
