@@ -155,7 +155,8 @@ def s3_startup(errors: list[str] | None,
                                      bucket=bucket,
                                      logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
@@ -182,21 +183,22 @@ def s3_get_client(errors: list[str] | None,
     # determine the S3 engine
     curr_engine: str = _assert_engine(errors=op_errors,
                                       engine=engine)
-    if curr_engine == "aws":
+    if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.get_client(errors=op_errors,
                                       logger=logger)
-    elif curr_engine == "minio":
+    elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
         result = minio_pomes.get_client(errors=op_errors,
                                         logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_data_retrieve(errors: list[str],
+def s3_data_retrieve(errors: list[str] | None,
                      identifier: str,
                      data_range: tuple[int, int] = None,
                      bucket: str = None,
@@ -248,12 +250,13 @@ def s3_data_retrieve(errors: list[str],
                                            client=client,
                                            logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_data_store(errors: list[str],
+def s3_data_store(errors: list[str] | None,
                   identifier: str,
                   data: bytes | str | BinaryIO,
                   length: int = -1,
@@ -316,12 +319,13 @@ def s3_data_store(errors: list[str],
                                         client=client,
                                         logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_file_retrieve(errors: list[str],
+def s3_file_retrieve(errors: list[str] | None,
                      identifier: str,
                      filepath: Path | str,
                      bucket: str = None,
@@ -373,12 +377,13 @@ def s3_file_retrieve(errors: list[str],
                                            client=client,
                                            logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_file_store(errors: list[str],
+def s3_file_store(errors: list[str] | None,
                   identifier: str,
                   filepath: Path | str,
                   mimetype: str,
@@ -438,12 +443,13 @@ def s3_file_store(errors: list[str],
                                         client=client,
                                         logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_object_retrieve(errors: list[str],
+def s3_object_retrieve(errors: list[str] | None,
                        identifier: str,
                        bucket: str = None,
                        prefix: str | Path = None,
@@ -479,12 +485,13 @@ def s3_object_retrieve(errors: list[str],
         try:
             result = pickle.loads(data)
         except Exception as e:
-            errors.append(_except_msg(exception=e,
-                                      engine=engine))
+            if isinstance(errors, list):
+                errors.append(_except_msg(exception=e,
+                                          engine=engine))
     return result
 
 
-def s3_object_store(errors: list[str],
+def s3_object_store(errors: list[str] | None,
                     identifier: str,
                     obj: Any,
                     tags: dict = None,
@@ -515,8 +522,9 @@ def s3_object_store(errors: list[str],
     try:
         data = pickle.dumps(obj=obj)
     except Exception as e:
-        errors.append(_except_msg(exception=e,
-                                  engine=engine))
+        if isinstance(errors, list):
+            errors.append(_except_msg(exception=e,
+                                      engine=engine))
     # was the data obtained ?
     if data:
         # yes, store the serialized object
@@ -534,7 +542,7 @@ def s3_object_store(errors: list[str],
     return result
 
 
-def s3_item_exists(errors: list[str],
+def s3_item_exists(errors: list[str] | None,
                    identifier: str = None,
                    bucket: str = None,
                    prefix: str | Path = None,
@@ -586,15 +594,15 @@ def s3_item_exists(errors: list[str],
                                                          engine=engine,
                                                          client=client,
                                                          logger=logger)
-        if op_errors:
-            errors.extend(op_errors)
-        else:
+        if not op_errors:
             result = isinstance(items_data, list) and len(items_data) > 0
+        elif isinstance(errors, list):
+            errors.extend(op_errors)
 
     return result
 
 
-def s3_item_get_info(errors: list[str],
+def s3_item_get_info(errors: list[str] | None,
                      identifier: str,
                      bucket: str = None,
                      prefix: str | Path = None,
@@ -646,12 +654,13 @@ def s3_item_get_info(errors: list[str],
                                            client=client,
                                            logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_item_get_tags(errors: list[str],
+def s3_item_get_tags(errors: list[str] | None,
                      identifier: str,
                      bucket: str = None,
                      prefix: str | Path = None,
@@ -704,12 +713,13 @@ def s3_item_get_tags(errors: list[str],
                                            client=client,
                                            logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_item_remove(errors: list[str],
+def s3_item_remove(errors: list[str] | None,
                    identifier: str,
                    bucket: str = None,
                    prefix: str | Path = None,
@@ -760,12 +770,13 @@ def s3_item_remove(errors: list[str],
                                          client=client,
                                          logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_items_list(errors: list[str],
+def s3_items_list(errors: list[str] | None,
                   max_count: int = None,
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -817,12 +828,13 @@ def s3_items_list(errors: list[str],
                                         client=client,
                                         logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result
 
 
-def s3_items_remove(errors: list[str],
+def s3_items_remove(errors: list[str] | None,
                     max_count: int,
                     bucket: str = None,
                     prefix: str | Path = None,
@@ -855,7 +867,7 @@ def s3_items_remove(errors: list[str],
     # make sure to have a bucket
     bucket = bucket or _get_param(engine=curr_engine,
                                   param=S3Param.BUCKET_NAME)
-    if curr_engine == "aws":
+    if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.items_remove(errors=op_errors,
                                         bucket=bucket,
@@ -863,7 +875,7 @@ def s3_items_remove(errors: list[str],
                                         max_count=max_count,
                                         client=client,
                                         logger=logger)
-    elif curr_engine == "minio":
+    elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
         result = minio_pomes.items_remove(errors=op_errors,
                                           bucket=bucket,
@@ -872,6 +884,7 @@ def s3_items_remove(errors: list[str],
                                           client=client,
                                           logger=logger)
     # acknowledge local errors
-    errors.extend(op_errors)
+    if isinstance(errors, list):
+        errors.extend(op_errors)
 
     return result

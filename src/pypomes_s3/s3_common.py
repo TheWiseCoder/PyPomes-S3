@@ -6,8 +6,7 @@ from enum import StrEnum, auto
 from typing import Any, Final
 from unidecode import unidecode
 
-# no need to import 'pypomes_http' just for this definition
-MIMETYPE_BINARY: Final[str] = "application/ octet-stream"
+MIMETYPE_BINARY: Final[str] = "application/octet-stream"
 
 
 class S3Engine(StrEnum):
