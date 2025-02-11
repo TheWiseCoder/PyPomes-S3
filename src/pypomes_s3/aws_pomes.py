@@ -3,10 +3,10 @@ from botocore.client import BaseClient
 from io import BytesIO
 from logging import Logger
 from pathlib import Path
+from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    MIMETYPE_BINARY,
     S3Engine, _get_param, _get_params, _normalize_tags, _except_msg, S3Param
 )
 
@@ -142,7 +142,7 @@ def data_store(errors: list[str],
                data: bytes | str | BinaryIO,
                bucket: str,
                prefix: str | Path = None,
-               mimetype: str = MIMETYPE_BINARY,
+               mimetype: Mimetype | str = Mimetype.BINARY,
                tags: dict[str, str] = None,
                client: BaseClient = None,
                logger: Logger = None) -> bool:
@@ -183,6 +183,8 @@ def data_store(errors: list[str],
                 obj_key: str = obj_path.as_posix()
             else:
                 obj_key: str = identifier
+            if isinstance(mimetype, Mimetype):
+                mimetype = mimetype.value
             client.put_object(Body=bin_data,
                               Bucket=bucket,
                               ContentType=mimetype,
@@ -248,7 +250,7 @@ def file_retrieve(errors: list[str],
 def file_store(errors: list[str],
                identifier: str,
                filepath: Path | str,
-               mimetype: str,
+               mimetype: Mimetype | str,
                bucket: str,
                prefix: str | Path = None,
                tags: dict[str, str] = None,
@@ -281,6 +283,8 @@ def file_store(errors: list[str],
         if mimetype or tags:
             extra_args = {}
             if mimetype:
+                if isinstance(mimetype, Mimetype):
+                    mimetype = mimetype.value
                 extra_args["ContentType"] = mimetype
             if tags:
                 extra_args["Metadata"] = _normalize_tags(tags)

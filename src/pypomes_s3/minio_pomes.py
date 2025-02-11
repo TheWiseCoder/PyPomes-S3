@@ -5,11 +5,11 @@ from minio import Minio
 from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
+from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 from urllib3.response import HTTPResponse
 
 from .s3_common import (
-    MIMETYPE_BINARY,
     S3Engine, S3Param, _get_param, _get_params, _normalize_tags, _except_msg
 )
 
@@ -141,7 +141,7 @@ def data_store(errors: list[str],
                bucket: str,
                prefix: str | Path = None,
                length: int = -1,
-               mimetype: str = MIMETYPE_BINARY,
+               mimetype: Mimetype | str = Mimetype.BINARY,
                tags: dict[str, str] = None,
                client: Minio = None,
                logger: Logger = None) -> bool:
@@ -183,6 +183,8 @@ def data_store(errors: list[str],
                 obj_name: str = obj_path.as_posix()
             else:
                 obj_name: str = identifier
+            if isinstance(mimetype, Mimetype):
+                mimetype = mimetype.value
             client.put_object(bucket_name=bucket,
                               object_name=obj_name,
                               data=bin_data,
@@ -249,7 +251,7 @@ def file_retrieve(errors: list[str],
 def file_store(errors: list[str],
                identifier: str,
                filepath: Path | str,
-               mimetype: str,
+               mimetype: Mimetype | str,
                bucket: str,
                prefix: str | Path = None,
                tags: dict[str, str] = None,
@@ -286,6 +288,8 @@ def file_store(errors: list[str],
             else:
                 obj_name: str = identifier
             file_path: str = Path(filepath).as_posix()
+            if isinstance(mimetype, Mimetype):
+                mimetype = mimetype.value
             client.fput_object(bucket_name=bucket,
                                object_name=obj_name,
                                file_path=file_path,

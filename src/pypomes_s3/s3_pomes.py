@@ -1,10 +1,11 @@
 import pickle
 from logging import Logger
 from pathlib import Path
+from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    MIMETYPE_BINARY, _S3_ENGINES, _S3_ACCESS_DATA,
+    _S3_ENGINES, _S3_ACCESS_DATA,
     S3Engine, S3Param, _assert_engine, _get_param, _except_msg
 )
 
@@ -260,7 +261,7 @@ def s3_data_store(errors: list[str] | None,
                   identifier: str,
                   data: bytes | str | BinaryIO,
                   length: int = -1,
-                  mimetype: str = MIMETYPE_BINARY,
+                  mimetype: Mimetype | str = Mimetype.BINARY,
                   tags: dict = None,
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -295,6 +296,9 @@ def s3_data_store(errors: list[str] | None,
     # make sure to have a bucket
     bucket = bucket or _get_param(engine=curr_engine,
                                   param=S3Param.BUCKET_NAME)
+
+    if isinstance(mimetype, Mimetype):
+        mimetype = mimetype.value
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.data_store(errors=op_errors,
@@ -386,7 +390,7 @@ def s3_file_retrieve(errors: list[str] | None,
 def s3_file_store(errors: list[str] | None,
                   identifier: str,
                   filepath: Path | str,
-                  mimetype: str,
+                  mimetype: Mimetype | str,
                   tags: dict = None,
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -420,6 +424,9 @@ def s3_file_store(errors: list[str] | None,
     # make sure to have a bucket
     bucket = bucket or _get_param(engine=curr_engine,
                                   param=S3Param.BUCKET_NAME)
+
+    if isinstance(mimetype, Mimetype):
+        mimetype = mimetype.value
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
@@ -532,7 +539,7 @@ def s3_object_store(errors: list[str] | None,
                                identifier=identifier,
                                data=data,
                                length=len(data),
-                               mimetype=MIMETYPE_BINARY,
+                               mimetype=Mimetype.BINARY,
                                tags=tags,
                                bucket=bucket,
                                prefix=prefix,

@@ -3,10 +3,8 @@ from pypomes_core import (
     env_get_bool, env_get_str, env_get_strs, str_sanitize
 )
 from enum import StrEnum, auto
-from typing import Any, Final
+from typing import Any
 from unidecode import unidecode
-
-MIMETYPE_BINARY: Final[str] = "application/octet-stream"
 
 
 class S3Engine(StrEnum):
