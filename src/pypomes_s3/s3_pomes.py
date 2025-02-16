@@ -297,8 +297,6 @@ def s3_data_store(errors: list[str] | None,
     bucket = bucket or _get_param(engine=curr_engine,
                                   param=S3Param.BUCKET_NAME)
 
-    if isinstance(mimetype, Mimetype):
-        mimetype = mimetype.value
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.data_store(errors=op_errors,
@@ -425,8 +423,6 @@ def s3_file_store(errors: list[str] | None,
     bucket = bucket or _get_param(engine=curr_engine,
                                   param=S3Param.BUCKET_NAME)
 
-    if isinstance(mimetype, Mimetype):
-        mimetype = mimetype.value
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.file_store(errors=op_errors,
