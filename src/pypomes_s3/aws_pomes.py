@@ -56,7 +56,7 @@ def startup(errors: list[str],
     :param errors: incidental error messages
     :param bucket: the bucket to use
     :param logger: optional logger
-    :return: 'True' if service is fully functional, 'False' otherwise
+    :return: *True* if service is fully functional, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -101,10 +101,10 @@ def data_retrieve(errors: list[str],
     :param identifier: the data identifier
     :param bucket: the bucket to use
     :param prefix: optional path specifying the location to retrieve the data from
-    :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
+    :param data_range: the begin-end positions within the data (in bytes, defaults to *None* - all bytes)
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the bytes retrieved, or 'None' if error or data not found
+    :return: the bytes retrieved, or *None* if error or data not found
     """
     # initialize the return variable
     result: bytes | None = None
@@ -158,7 +158,7 @@ def data_store(errors: list[str],
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the data was successfully stored, 'False' otherwise
+    :return: *True* if the data was successfully stored, *False* otherwise
     """
     # initialize the return variable
     result: bool = True
@@ -217,7 +217,7 @@ def file_retrieve(errors: list[str],
     :param prefix: optional path specifying the location to retrieve the file from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the file retrieved, or 'None' if error or file not found
+    :return: information about the file retrieved, or *None* if error or file not found
     """
     # initialize the return variable
     result: Any = None
@@ -268,7 +268,7 @@ def file_store(errors: list[str],
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the file was successfully stored, 'False' otherwise
+    :return: *True* if the file was successfully stored, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -364,7 +364,7 @@ def item_get_info(errors: list[str],
     :param prefix: optional path specifying where to locate the item
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the item, or 'None' if error or item not found
+    :return: information about the item, or *None* if error or item not found
     """
     # initialize the return variable
     result: dict[str, Any] | None = None
@@ -453,7 +453,7 @@ def item_get_tags(errors: list[str],
     :param prefix: optional path specifying the location to retrieve the item from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the metadata tags associated with the item, or 'None' if error or item not found
+    :return: the metadata tags associated with the item, or *None* if error or item not found
     """
     # initialize the return variable
     result: dict[str, Any] | None = None
@@ -605,7 +605,7 @@ def items_list(errors: list[str],
     :param prefix: optional path specifying the location to retrieve the items from
     :param client: optional AWS client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information on a list of items, or 'None' if error or path not found
+    :return: information on a list of items, or *None* if error or path not found
     """
     # initialize the return variable
     result: list[dict[str, Any]] | None = None

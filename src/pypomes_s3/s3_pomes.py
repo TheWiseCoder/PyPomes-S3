@@ -1,7 +1,7 @@
 import pickle
 from logging import Logger
 from pathlib import Path
-from pypomes_core import Mimetype
+from pypomes_core import Mimetype, dict_jsonify
 from typing import Any, BinaryIO
 
 from .s3_common import (
@@ -23,14 +23,14 @@ def s3_setup(engine: S3Engine,
     The meaning of some parameters may vary between different S3 engines.
     All parameters, with the exception of *region_name* and *secure_access*, are required.
 
-    :param engine: the S3 engine (one of ['aws', 'minio'])
+    :param engine: the S3 engine (one of [*aws*, *minio*])
     :param endpoint_url: the access URL for the service
     :param bucket_name: the name of the default bucket
     :param access_key: the access key for the service
     :param secret_key: the access secret code
     :param region_name: the name of the region where the engine is located
     :param secure_access: whether or not to use Transport Security Layer
-    :return: 'True' if the data were accepted, 'False' otherwise
+    :return: *True* if the data were accepted, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -56,11 +56,12 @@ def s3_setup(engine: S3Engine,
 
 def s3_get_engines() -> list[S3Engine]:
     """
-    Retrieve and return the list of configured engines.
+    Retrieve and return the *list* of configured engines.
 
-    This list may include any of the supported engines: *aws*, *minio*.
+    This *list* may include any of the supported engines: *aws*, *minio*.
+    Note that the values in the returned *list* are instances of *S3Engine*, not strings.
 
-    :return: the list of configured engines
+    :return: the *list* of configured engines
     """
     # SANITY-CHECK: return a cloned 'list'
     return _S3_ENGINES.copy()
@@ -70,6 +71,9 @@ def s3_get_param(key: S3Param,
                  engine: S3Engine = None) -> str:
     """
     Return the connection parameter value for *key*.
+
+    The *key* should be one of *endpoint-url*, *bucket-name*, *access-key*, *secret-key*,
+    and *secure-access*. For *aws*, the extra key *region-name* may be used.
 
     :param key: the connection parameter
     :param engine: the reference S3 engine (the default engine, if not provided)
@@ -84,21 +88,22 @@ def s3_get_param(key: S3Param,
 
 def s3_get_params(engine: S3Engine = None) -> dict[str, Any]:
     """
-    Return the access parameters as a *dict*.
+    Return the current access parameters as a *dict*.
+
+    The returned *dict* contains the keys *endpoint-url*, *bucket-name*,
+    *access-key*, *secret-key*, *region-name*, and *secure-access*.
+    The meaning of these parameters may vary between different S3 engines.
+    Note that the keys in the returned *dict* are strings, not *S3Param* instances.
 
     :param engine: the database engine
     :return: the current connection parameters for the engine
     """
-    # initialize the return variable
-    result: dict[str, Any] | None = None
-
+    # determine the S3 engine
     curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
-    s3_params: dict[S3Param, Any] = _S3_ACCESS_DATA.get(curr_engine)
-    if s3_params:
-        # noinspection PyTypeChecker
-        result = {k.value: v for (k, v) in s3_params.items()}
 
-    return result
+    return dict_jsonify(source=_S3_ACCESS_DATA.get(curr_engine).copy(),
+                        jsonify_keys=True,
+                        jsonify_values=False)
 
 
 def s3_assert_access(errors: list[str] | None,
@@ -110,7 +115,7 @@ def s3_assert_access(errors: list[str] | None,
     :param errors: incidental errors
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param logger: optional logger
-    :return: 'True' if accessing succeeded, 'False' otherwise
+    :return: *True* if accessing succeeded, *False* otherwise
     """
     return s3_get_client(errors=errors,
                          engine=engine,
@@ -131,7 +136,7 @@ def s3_startup(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param bucket: the bucket to use
     :param logger: optional logger
-    :return: 'True' if service is fully functional
+    :return: *True* if service is fully functional, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -173,7 +178,7 @@ def s3_get_client(errors: list[str] | None,
     :param errors: incidental error messages
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param logger: optional logger
-    :return: the client to the S3 engine
+    :return: the client to the S3 engine, or *None* if the client cannot be obtained
     """
     # initialize the return variable
     result: Any = None
@@ -212,13 +217,13 @@ def s3_data_retrieve(errors: list[str] | None,
 
     :param errors: incidental error messages
     :param identifier: the data identifier
-    :param data_range: the begin-end positions within the data (in bytes, defaults to 'None' - all bytes)
+    :param data_range: the begin-end positions within the data (in bytes, defaults to *None* - all bytes)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path specifying the location to retrieve the data from
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the bytes retrieved, or 'None' if error or data not found
+    :return: the bytes retrieved, or *None* if error or data not found
     """
     # initialize the return variable
     result: bytes | None = None
@@ -346,7 +351,7 @@ def s3_file_retrieve(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the file retrieved, or 'None' if error or file not found
+    :return: information about the file retrieved, or *None* if error or file not found
     """
     # initialize the return variable
     result: Any = None
@@ -408,7 +413,7 @@ def s3_file_store(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the file was successfully stored, 'False' otherwise
+    :return: *True* if the file was successfully stored, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -469,7 +474,7 @@ def s3_object_retrieve(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the object retrieved, or 'None' if error or object not found
+    :return: the object retrieved, or *None* if error or object not found
     """
     # initialize the return variable
     result: Any = None
@@ -515,7 +520,7 @@ def s3_object_store(errors: list[str] | None,
     :param prefix: optional path specifying the location to store the object at
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the object was successfully stored, 'False' otherwise
+    :return: *True* if the object was successfully stored, *False* otherwise
     """
     # initialize the return variable
     result: bool = False
@@ -566,7 +571,7 @@ def s3_item_exists(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: 'True' if the item was found, 'False' otherwise, 'None' if error
+    :return: *True* if the item was found, *False* otherwise, *None* if error
     """
     # initialize the return variable
     result: bool | None = None
@@ -626,7 +631,7 @@ def s3_item_get_info(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information about the item, or 'None' if error or item not found
+    :return: information about the item, or *None* if error or item not found
     """
     # initialize the return variable
     result: Any | None = None
@@ -672,7 +677,7 @@ def s3_item_get_tags(errors: list[str] | None,
                      logger: Logger = None) -> dict:
     """
     Retrieve and return the existing metadata tags for an item in the S3 store.
-    
+
     The item might be interpreted as unspecified data, a file, or an object.
     If item has no associated metadata tags, an empty *dict* is returned.
     The information returned depends on the *engine* in question, and can be viewed
@@ -685,7 +690,7 @@ def s3_item_get_tags(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: the metadata tags associated with the item, or 'None' if error or item not found
+    :return: the metadata tags associated with the item, or *None* if error or item not found
     """
     # initialize the return variable
     result: dict | None = None
@@ -800,7 +805,7 @@ def s3_items_list(errors: list[str] | None,
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param logger: optional logger
-    :return: information on a list of items, or 'None' if error or path not found
+    :return: information on a list of items, or *None* if error or path not found
     """
     # initialize the return variable
     result: list[dict[str, Any]] | None = None

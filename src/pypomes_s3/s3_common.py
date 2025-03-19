@@ -8,17 +8,23 @@ from unidecode import unidecode
 
 
 class S3Engine(StrEnum):
+    """
+    Supported S# engines.
+    """
     AWS = auto()
     MINIO = auto()
 
 
 class S3Param(StrEnum):
-    ENDPOINT_URL = auto()
-    BUCKET_NAME = auto()
-    ACCESS_KEY = auto()
-    SECRET_KEY = auto()
-    SECURE_ACCESS = auto()
-    REGION_NAME = auto()
+    """
+    Parameters for connecting to S3 engines.
+    """
+    ENDPOINT_URL = "endpoint-url"
+    BUCKET_NAME = "bucket-name"
+    ACCESS_KEY = "access-key"
+    SECRET_KEY = "secret-key"
+    SECURE_ACCESS = "secure-access"
+    REGION_NAME = "region-name"
 
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
@@ -72,12 +78,12 @@ def _assert_engine(errors: list[str],
     """
     Verify if *engine* is in the list of supported engines.
 
-    If *engine* is a supported engine, it is returned. If its value is 'None',
+    If *engine* is a supported engine, it is returned. If its value is *None*,
     the first engine in the list of supported engines (the default engine) is returned.
 
     :param errors: incidental errors
     :param engine: the reference database engine
-    :return: the validated or default engine
+    :return: the validated or the default engine
     """
     # initialize the return valiable
     result: S3Engine | None = None
