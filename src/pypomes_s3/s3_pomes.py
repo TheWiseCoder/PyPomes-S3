@@ -107,7 +107,7 @@ def s3_get_params(engine: S3Engine = None) -> dict[str, Any]:
 
 
 def s3_assert_access(errors: list[str] | None,
-                     engine: str = None,
+                     engine: S3Engine = None,
                      logger: Logger = None) -> bool:
     """
     Determine whether the *engine*'s current configuration allows for accessing the S3 services.
@@ -187,8 +187,8 @@ def s3_get_client(errors: list[str] | None,
     op_errors: list[str] = []
 
     # determine the S3 engine
-    curr_engine: str = _assert_engine(errors=op_errors,
-                                      engine=engine)
+    curr_engine: S3Engine = _assert_engine(errors=op_errors,
+                                           engine=engine)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.get_client(errors=op_errors,

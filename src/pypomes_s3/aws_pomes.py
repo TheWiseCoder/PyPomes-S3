@@ -7,7 +7,7 @@ from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    S3Engine, _get_param, _get_params, _normalize_tags, _except_msg, S3Param
+    S3Engine, S3Param, _get_param, _get_params, _normalize_tags, _except_msg
 )
 
 
