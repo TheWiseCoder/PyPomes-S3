@@ -9,7 +9,7 @@ from unidecode import unidecode
 
 class S3Engine(StrEnum):
     """
-    Supported S# engines.
+    Supported S3 engines.
     """
     AWS = auto()
     MINIO = auto()
@@ -62,7 +62,6 @@ for _s3_engine in _S3_ENGINES:
         _default_setup = False
     else:
         _tag = _s3_engine.upper()
-    # noinspection PyTypeChecker
     _S3_ACCESS_DATA[_s3_engine] = {
         S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
         S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
@@ -130,7 +129,6 @@ def _except_msg(exception: Exception,
     :param engine: the reference database engine
     :return: the formatted error message
     """
-    # noinspection PyTypeChecker
     endpoint: str = (_S3_ACCESS_DATA.get(engine) or {}).get(S3Param.ENDPOINT_URL)
     return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
 

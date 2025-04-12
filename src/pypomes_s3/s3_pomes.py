@@ -2,6 +2,7 @@ import pickle
 from logging import Logger
 from pathlib import Path
 from pypomes_core import Mimetype, dict_jsonify
+from pypomes_logging import PYPOMES_LOGGER
 from typing import Any, BinaryIO
 
 from .s3_common import (
@@ -108,7 +109,7 @@ def s3_get_params(engine: S3Engine = None) -> dict[str, Any]:
 
 def s3_assert_access(errors: list[str] | None,
                      engine: S3Engine = None,
-                     logger: Logger = None) -> bool:
+                     logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Determine whether the *engine*'s current configuration allows for accessing the S3 services.
 
@@ -125,7 +126,7 @@ def s3_assert_access(errors: list[str] | None,
 def s3_startup(errors: list[str] | None,
                engine: S3Engine = None,
                bucket: str = None,
-               logger: Logger = None) -> bool:
+               logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Prepare the S3 client for operations.
 
@@ -169,7 +170,7 @@ def s3_startup(errors: list[str] | None,
 
 def s3_get_client(errors: list[str] | None,
                   engine: S3Engine = None,
-                  logger: Logger = None) -> Any:
+                  logger: Logger = PYPOMES_LOGGER) -> Any:
     """
     Obtain and return a client to *engine*, or *None* if the client cannot be obtained.
 
@@ -211,7 +212,7 @@ def s3_data_retrieve(errors: list[str] | None,
                      prefix: str | Path = None,
                      engine: S3Engine = None,
                      client: Any = None,
-                     logger: Logger = None) -> bytes:
+                     logger: Logger = PYPOMES_LOGGER) -> bytes:
     """
     Retrieve data from the S3 store.
 
@@ -272,7 +273,7 @@ def s3_data_store(errors: list[str] | None,
                   prefix: str | Path = None,
                   engine: S3Engine = None,
                   client: Any = None,
-                  logger: Logger = None) -> bool:
+                  logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Store data at the S3 store.
 
@@ -339,7 +340,7 @@ def s3_file_retrieve(errors: list[str] | None,
                      prefix: str | Path = None,
                      engine: S3Engine = None,
                      client: Any = None,
-                     logger: Logger = None) -> Any:
+                     logger: Logger = PYPOMES_LOGGER) -> Any:
     """
     Retrieve a file from the S3 store.
 
@@ -399,7 +400,7 @@ def s3_file_store(errors: list[str] | None,
                   prefix: str | Path = None,
                   engine: S3Engine = None,
                   client: Any = None,
-                  logger: Logger = None) -> bool:
+                  logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Store a file at the S3 store.
 
@@ -463,7 +464,7 @@ def s3_object_retrieve(errors: list[str] | None,
                        prefix: str | Path = None,
                        engine: S3Engine = None,
                        client: Any = None,
-                       logger: Logger = None) -> Any:
+                       logger: Logger = PYPOMES_LOGGER) -> Any:
     """
     Retrieve an object from the S3 store.
 
@@ -507,7 +508,7 @@ def s3_object_store(errors: list[str] | None,
                     prefix: str | Path = None,
                     engine: S3Engine = None,
                     client: Any = None,
-                    logger: Logger = None) -> bool:
+                    logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Store an object at the S3 store.
 
@@ -556,7 +557,7 @@ def s3_item_exists(errors: list[str] | None,
                    prefix: str | Path = None,
                    engine: S3Engine = None,
                    client: Any = None,
-                   logger: Logger = None) -> bool:
+                   logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Determine if a given item exists in the S3 store.
 
@@ -616,7 +617,7 @@ def s3_item_get_info(errors: list[str] | None,
                      prefix: str | Path = None,
                      engine: S3Engine = None,
                      client: Any = None,
-                     logger: Logger = None) -> Any:
+                     logger: Logger = PYPOMES_LOGGER) -> Any:
     """
     Retrieve and return the information about an item in the S3 store.
 
@@ -674,7 +675,7 @@ def s3_item_get_tags(errors: list[str] | None,
                      prefix: str | Path = None,
                      engine: S3Engine = None,
                      client: Any = None,
-                     logger: Logger = None) -> dict:
+                     logger: Logger = PYPOMES_LOGGER) -> dict:
     """
     Retrieve and return the existing metadata tags for an item in the S3 store.
 
@@ -733,7 +734,7 @@ def s3_item_remove(errors: list[str] | None,
                    prefix: str | Path = None,
                    engine: S3Engine = None,
                    client: Any = None,
-                   logger: Logger = None) -> int:
+                   logger: Logger = PYPOMES_LOGGER) -> int:
     """
     Remove an item from the S3 store.
 
@@ -790,7 +791,7 @@ def s3_items_list(errors: list[str] | None,
                   prefix: str | Path = None,
                   engine: S3Engine = None,
                   client: Any = None,
-                  logger: Logger = None) -> list[dict[str, Any]]:
+                  logger: Logger = PYPOMES_LOGGER) -> list[dict[str, Any]]:
     """
     Retrieve and return information on a list of items in *prefix*, in the S3 store.
 
@@ -848,7 +849,7 @@ def s3_items_remove(errors: list[str] | None,
                     prefix: str | Path = None,
                     engine: S3Engine = None,
                     client: Any = None,
-                    logger: Logger = None) -> int:
+                    logger: Logger = PYPOMES_LOGGER) -> int:
     """
     Recursively remove up to *max_count* items in a folder, from the S3 store.
 

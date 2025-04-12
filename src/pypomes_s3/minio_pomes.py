@@ -6,6 +6,7 @@ from minio.datatypes import Object as MinioObject
 from minio.commonconfig import Tags
 from pathlib import Path
 from pypomes_core import Mimetype
+from pypomes_logging import PYPOMES_LOGGER
 from typing import Any, BinaryIO
 from urllib3.response import HTTPResponse
 
@@ -16,7 +17,7 @@ from .s3_common import (
 
 def startup(errors: list[str],
             bucket: str,
-            logger: Logger = None) -> bool:
+            logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Prepare the *MinIO* client for operations.
 
@@ -53,7 +54,7 @@ def startup(errors: list[str],
 
 
 def get_client(errors: list[str],
-               logger: Logger = None) -> Minio:
+               logger: Logger = PYPOMES_LOGGER) -> Minio:
     """
     Obtain and return a *MinIO* client object.
 
@@ -89,7 +90,7 @@ def data_retrieve(errors: list[str],
                   prefix: str | Path = None,
                   data_range: tuple[int, int] = None,
                   client: Minio = None,
-                  logger: Logger = None) -> bytes:
+                  logger: Logger = PYPOMES_LOGGER) -> bytes:
     """
     Retrieve data from the *MinIO* store.
 
@@ -144,7 +145,7 @@ def data_store(errors: list[str],
                mimetype: Mimetype | str = Mimetype.BINARY,
                tags: dict[str, str] = None,
                client: Minio = None,
-               logger: Logger = None) -> bool:
+               logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Store *data* at the *MinIO* store.
 
@@ -207,7 +208,7 @@ def file_retrieve(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: Minio = None,
-                  logger: Logger = None) -> Any:
+                  logger: Logger = PYPOMES_LOGGER) -> Any:
     """
     Retrieve a file from the *MinIO* store.
 
@@ -256,7 +257,7 @@ def file_store(errors: list[str],
                prefix: str | Path = None,
                tags: dict[str, str] = None,
                client: Minio = None,
-               logger: Logger = None) -> bool:
+               logger: Logger = PYPOMES_LOGGER) -> bool:
     """
     Store a file at the *MinIO* store.
 
@@ -310,7 +311,7 @@ def item_get_info(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: Minio = None,
-                  logger: Logger = None) -> dict[str, Any]:
+                  logger: Logger = PYPOMES_LOGGER) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *MinIO* store.
 
@@ -364,7 +365,7 @@ def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: Minio = None,
-                  logger: Logger = None) -> dict[str, str]:
+                  logger: Logger = PYPOMES_LOGGER) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *MinIO* store.
 
@@ -414,7 +415,7 @@ def item_remove(errors: list[str],
                 bucket: str,
                 prefix: str | Path = None,
                 client: Minio = None,
-                logger: Logger = None) -> int:
+                logger: Logger = PYPOMES_LOGGER) -> int:
     """
     Remove an item from the *MinIO* store.
 
@@ -455,7 +456,7 @@ def items_list(errors: list[str],
                bucket: str,
                prefix: str | Path = None,
                client: Minio = None,
-               logger: Logger = None) -> list[dict[str, Any]]:
+               logger: Logger = PYPOMES_LOGGER) -> list[dict[str, Any]]:
     """
     Recursively retrieve and return information on a list of items in *prefix*, in the *MinIO* store.
 
@@ -514,7 +515,7 @@ def items_remove(errors: list[str],
                  bucket: str,
                  prefix: str | Path = None,
                  client: Minio = None,
-                 logger: Logger = None) -> int:
+                 logger: Logger = PYPOMES_LOGGER) -> int:
     """
     Recursively remove up to *max_count* items in a folder, from the *MinIO* store.
 
@@ -564,7 +565,7 @@ def _item_delete(errors: list[str],
                  bucket: str,
                  obj_name: str,
                  client: Minio,
-                 logger: Logger = None) -> int:
+                 logger: Logger = PYPOMES_LOGGER) -> int:
     """
     Delete the item in the *MinIO* store.
 
