@@ -1,7 +1,7 @@
 import pickle
 from logging import Logger
 from pathlib import Path
-from pypomes_core import Mimetype, dict_jsonify
+from pypomes_core import Mimetype
 from pypomes_logging import PYPOMES_LOGGER
 from typing import Any, BinaryIO
 
@@ -41,6 +41,7 @@ def s3_setup(engine: S3Engine,
        endpoint_url and bucket_name and \
        access_key and secret_key:
         _S3_ACCESS_DATA[engine] = {
+            S3Param.ENGINE: engine.value,
             S3Param.ENDPOINT_URL: endpoint_url,
             S3Param.BUCKET_NAME: bucket_name,
             S3Param.ACCESS_KEY: access_key,
@@ -69,7 +70,7 @@ def s3_get_engines() -> list[S3Engine]:
 
 
 def s3_get_param(key: S3Param,
-                 engine: S3Engine = None) -> str:
+                 engine: S3Engine = None) -> str | None:
     """
     Return the connection parameter value for *key*.
 
@@ -78,16 +79,17 @@ def s3_get_param(key: S3Param,
 
     :param key: the connection parameter
     :param engine: the reference S3 engine (the default engine, if not provided)
-    :return: the current value of the connection parameter
+    :return: the current value of the connection parameter, or *None* if not found
     """
     # determine the S3 engine
     curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
 
+    # retrieve the connection parameter
     return _get_param(engine=curr_engine,
                       param=key)
 
 
-def s3_get_params(engine: S3Engine = None) -> dict[str, Any]:
+def s3_get_params(engine: S3Engine = None) -> dict[S3Param, Any] | None:
     """
     Return the current access parameters as a *dict*.
 
@@ -97,14 +99,13 @@ def s3_get_params(engine: S3Engine = None) -> dict[str, Any]:
     Note that the keys in the returned *dict* are strings, not *S3Param* instances.
 
     :param engine: the database engine
-    :return: the current connection parameters for the engine
+    :return: the current connection parameters for the engine, or *None* if not found
     """
     # determine the S3 engine
     curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
 
-    return dict_jsonify(source=_S3_ACCESS_DATA.get(curr_engine).copy(),
-                        jsonify_keys=True,
-                        jsonify_values=False)
+    # return the connection parameters
+    return _S3_ACCESS_DATA.get(curr_engine).copy() if _S3_ACCESS_DATA.get(curr_engine) else None
 
 
 def s3_assert_access(errors: list[str] | None,
@@ -164,6 +165,30 @@ def s3_startup(errors: list[str] | None,
     # acknowledge local errors
     if isinstance(errors, list):
         errors.extend(op_errors)
+
+    return result
+
+
+def s3_get_version(engine: S3Engine = None) -> str | None:
+    """
+    Obtain and return the current version of *engine*.
+
+    :param engine: the reference S3 engine (the default engine, if not provided)
+    :return: the engine's current version, or *None* if not found
+    """
+    # initialize the return variable
+    result: str | None = None
+
+    # determine the database engine
+    curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
+
+    match curr_engine:
+        case S3Engine.MINIO:
+            import minio
+            result = minio.__version__
+        case S3Engine.AWS:
+            import boto3
+            result = boto3.__version__
 
     return result
 

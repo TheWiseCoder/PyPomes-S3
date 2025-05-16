@@ -19,6 +19,7 @@ class S3Param(StrEnum):
     """
     Parameters for connecting to S3 engines.
     """
+    ENGINE = "engine"
     ENDPOINT_URL = "endpoint-url"
     BUCKET_NAME = "bucket-name"
     ACCESS_KEY = "access-key"
