@@ -4,7 +4,6 @@ from io import BytesIO
 from logging import Logger
 from pathlib import Path
 from pypomes_core import Mimetype
-from pypomes_logging import PYPOMES_LOGGER
 from typing import Any, BinaryIO
 
 from .s3_common import (
@@ -13,7 +12,7 @@ from .s3_common import (
 
 
 def get_client(errors: list[str],
-               logger: Logger = PYPOMES_LOGGER) -> BaseClient:
+               logger: Logger = None) -> BaseClient:
     """
     Obtain and return a *AWS* client object.
 
@@ -47,7 +46,7 @@ def get_client(errors: list[str],
 
 def startup(errors: list[str],
             bucket: str,
-            logger: Logger = PYPOMES_LOGGER) -> bool:
+            logger: Logger = None) -> bool:
     """
     Prepare the *AWS* client for operations.
 
@@ -94,7 +93,7 @@ def data_retrieve(errors: list[str],
                   prefix: str | Path = None,
                   data_range: tuple[int, int] = None,
                   client: BaseClient = None,
-                  logger: Logger = PYPOMES_LOGGER) -> bytes:
+                  logger: Logger = None) -> bytes:
     """
     Retrieve data from the *AWS* store.
 
@@ -146,7 +145,7 @@ def data_store(errors: list[str],
                mimetype: Mimetype | str = Mimetype.BINARY,
                tags: dict[str, str] = None,
                client: BaseClient = None,
-               logger: Logger = PYPOMES_LOGGER) -> bool:
+               logger: Logger = None) -> bool:
     """
     Store *data* at the *AWS* store.
 
@@ -207,7 +206,7 @@ def file_retrieve(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: BaseClient = None,
-                  logger: Logger = PYPOMES_LOGGER) -> Any:
+                  logger: Logger = None) -> Any:
     """
     Retrieve a file from the *AWS* store.
 
@@ -256,7 +255,7 @@ def file_store(errors: list[str],
                prefix: str | Path = None,
                tags: dict[str, str] = None,
                client: BaseClient = None,
-               logger: Logger = PYPOMES_LOGGER) -> bool:
+               logger: Logger = None) -> bool:
     """
     Store a file at the *AWS* store.
 
@@ -317,7 +316,7 @@ def item_get_info(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: BaseClient = None,
-                  logger: Logger = PYPOMES_LOGGER) -> dict[str, Any]:
+                  logger: Logger = None) -> dict[str, Any]:
     """
     Retrieve and return information about an item in the *AWS* store.
 
@@ -398,7 +397,7 @@ def item_get_tags(errors: list[str],
                   bucket: str,
                   prefix: str | Path = None,
                   client: BaseClient = None,
-                  logger: Logger = PYPOMES_LOGGER) -> dict[str, str]:
+                  logger: Logger = None) -> dict[str, str]:
     """
     Retrieve and return the existing metadata tags for an item in the *AWS* store.
 
@@ -491,7 +490,7 @@ def item_remove(errors: list[str],
                 bucket: str,
                 prefix: str | Path = None,
                 client: BaseClient = None,
-                logger: Logger = PYPOMES_LOGGER) -> int:
+                logger: Logger = None) -> int:
     """
     Remove an item from the *AWS* store.
 
@@ -551,7 +550,7 @@ def items_list(errors: list[str],
                bucket: str,
                prefix: str | Path = None,
                client: BaseClient = None,
-               logger: Logger = PYPOMES_LOGGER) -> list[dict[str, Any]]:
+               logger: Logger = None) -> list[dict[str, Any]]:
     """
     Retrieve and return information on a list of items in *prefix*, in the *AWS* store.
 
@@ -635,7 +634,7 @@ def items_remove(errors: list[str],
                  bucket: str,
                  prefix: str | Path = None,
                  client: BaseClient = None,
-                 logger: Logger = PYPOMES_LOGGER) -> int:
+                 logger: Logger = None) -> int:
     """
     Recursively remove up to *max_count* items in a folder, from the *AWS* store.
 
