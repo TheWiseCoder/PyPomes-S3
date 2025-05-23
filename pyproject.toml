@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 dependencies = [
-    "pypomes_core>=2.2.9",
+    "pypomes_core>=2.3.3",
     "Unidecode>=1.4.0"
 #   "boto3>=1.38.18"
 #   "minio>=7.2.15"

@@ -131,7 +131,7 @@ def _except_msg(exception: Exception,
     :return: the formatted error message
     """
     endpoint: str = (_S3_ACCESS_DATA.get(engine) or {}).get(S3Param.ENDPOINT_URL)
-    return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
+    return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(source=f'{exception}')}"
 
 
 def _normalize_tags(tags: dict[str, str]) -> dict[str, str]:

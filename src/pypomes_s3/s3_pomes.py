@@ -29,7 +29,7 @@ def s3_setup(engine: S3Engine,
     :param access_key: the access key for the service
     :param secret_key: the access secret code
     :param region_name: the name of the region where the engine is located
-    :param secure_access: whether or not to use Transport Security Layer
+    :param secure_access: whether to use Transport Security Layer
     :return: *True* if the data were accepted, *False* otherwise
     """
     # initialize the return variable
