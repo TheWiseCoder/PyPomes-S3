@@ -131,6 +131,7 @@ def data_retrieve(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.AWS))
@@ -142,6 +143,7 @@ def data_store(errors: list[str],
                data: bytes | str | BinaryIO,
                bucket: str,
                prefix: str | Path = None,
+               length: int = None,
                mimetype: Mimetype | str = Mimetype.BINARY,
                tags: dict[str, str] = None,
                client: BaseClient = None,
@@ -149,10 +151,13 @@ def data_store(errors: list[str],
     """
     Store *data* at the *AWS* store.
 
+    In case *length* cannot be determined, it should be set to *None*.
+
     :param errors: incidental error messages
     :param identifier: the data identifier
     :param data: the data to store
     :param bucket: the bucket to use
+    :param length:  the length of the data
     :param prefix: optional path specifying the location to store the file at
     :param mimetype: the data mimetype
     :param tags: optional metadata tags describing the file
@@ -161,7 +166,7 @@ def data_store(errors: list[str],
     :return: *True* if the data was successfully stored, *False* otherwise
     """
     # initialize the return variable
-    result: bool = True
+    result: bool = False
 
     # make sure to have a client
     client = client or get_client(errors=errors,
@@ -187,6 +192,7 @@ def data_store(errors: list[str],
                 mimetype = mimetype.value
             client.put_object(Body=bin_data,
                               Bucket=bucket,
+                              ContentLength=length,
                               ContentType=mimetype,
                               Key=obj_key,
                               Metadata=_normalize_tags(tags))
@@ -241,6 +247,7 @@ def file_retrieve(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', to '{file_path}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.AWS))
@@ -386,6 +393,7 @@ def item_get_info(errors: list[str],
             if logger:
                 logger.debug(msg=f"Got info for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.AWS))
@@ -478,6 +486,7 @@ def item_get_tags(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.AWS))
@@ -701,6 +710,7 @@ def _item_delete(errors: list[str],
             logger.debug(msg=f"Deleted '{obj_key}', bucket '{bucket}'")
         result = 1
     except Exception as e:
+        # noinspection PyUnresolvedReferences
         if not hasattr(e, "code") or e.code != "NoSuchKey":
             errors.append(_except_msg(exception=e,
                                       engine=S3Engine.AWS))

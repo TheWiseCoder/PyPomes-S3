@@ -55,9 +55,9 @@ class MinioCM:
         return self.minio_client
 
     def __exit__(self,
-                 exception_type: type[BaseException],
-                 exception_value: BaseException,
-                 traceback: TracebackType) -> bool:
+                 exception_type: type[BaseException] | None,
+                 exception_value: BaseException | None,
+                 traceback: TracebackType | None) -> bool:
         """
         Last step in providing a context-managed *MinIO* client.
         """

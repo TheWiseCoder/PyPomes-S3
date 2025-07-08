@@ -130,6 +130,7 @@ def data_retrieve(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.MINIO))
@@ -149,6 +150,8 @@ def data_store(errors: list[str],
     """
     Store *data* at the *MinIO* store.
 
+    In case *length* cannot be determined, it should be set to *-1*.
+
     :param errors: incidental error messages
     :param identifier: the data identifier
     :param data: the data to store
@@ -162,7 +165,7 @@ def data_store(errors: list[str],
     :return: *True* if the data was successfully stored, *False* otherwise
     """
     # initialize the return variable
-    result: bool = True
+    result: bool = False
 
     # make sure to have a client
     client = client or get_client(errors=errors,
@@ -243,6 +246,7 @@ def file_retrieve(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}', to '{file_path}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.MINIO))
@@ -352,6 +356,7 @@ def item_get_info(errors: list[str],
             if logger:
                 logger.debug(msg=f"Got info for '{obj_name}', bucket '{bucket}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if hasattr(e, "code") or e.code != "NoSuchKey":
                 result = {}
             else:
@@ -404,6 +409,7 @@ def item_get_tags(errors: list[str],
             if logger:
                 logger.debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             if not hasattr(e, "code") or e.code != "NoSuchKey":
                 errors.append(_except_msg(exception=e,
                                           engine=S3Engine.MINIO))
@@ -587,6 +593,7 @@ def _item_delete(errors: list[str],
         result = 1
     except Exception as e:
         # SANITY CHECK: in case of concurrent exclusion
+        # noinspection PyUnresolvedReferences
         if not hasattr(e, "code") or e.code != "NoSuchKey":
             errors.append(_except_msg(exception=e,
                                       engine=S3Engine.MINIO))

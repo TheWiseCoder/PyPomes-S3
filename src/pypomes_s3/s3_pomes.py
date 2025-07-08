@@ -104,7 +104,7 @@ def s3_get_params(engine: S3Engine = None) -> dict[S3Param, Any] | None:
     curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
 
     # return the connection parameters
-    return _S3_ACCESS_DATA.get(curr_engine).copy() if _S3_ACCESS_DATA.get(curr_engine) else None
+    return _S3_ACCESS_DATA.get(curr_engine).copy() if curr_engine in _S3_ACCESS_DATA else None
 
 
 def s3_assert_access(errors: list[str] | None,
@@ -290,7 +290,7 @@ def s3_data_retrieve(errors: list[str] | None,
 def s3_data_store(errors: list[str] | None,
                   identifier: str,
                   data: bytes | str | BinaryIO,
-                  length: int = -1,
+                  length: int,
                   mimetype: Mimetype | str = Mimetype.BINARY,
                   tags: dict = None,
                   bucket: str = None,
@@ -301,10 +301,12 @@ def s3_data_store(errors: list[str] | None,
     """
     Store data at the S3 store.
 
+    In case *length* cannot be determined, it should be set to *-1* (MinIO), or to *None* (AWS).
+
     :param errors: incidental error messages
     :param identifier: the data identifier
     :param data: the data to store
-    :param length: the length of the data (MinIO only, defaults to -1: unknown)
+    :param length: the length of the data
     :param mimetype: the data mimetype
     :param tags: optional metadata tags describing the data
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -334,6 +336,7 @@ def s3_data_store(errors: list[str] | None,
                                       data=data,
                                       bucket=bucket,
                                       prefix=prefix,
+                                      length=length,
                                       mimetype=mimetype,
                                       tags=tags,
                                       client=client,
