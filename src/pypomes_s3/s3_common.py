@@ -1,9 +1,10 @@
 from pypomes_core import (
     APP_PREFIX,
-    env_get_bool, env_get_str, env_get_strs, str_sanitize
+    env_get_bool, env_get_str,
+    env_get_enum, env_get_enums, str_sanitize
 )
 from enum import StrEnum, auto
-from typing import Any
+from typing import Any, Final
 from unidecode import unidecode
 
 
@@ -29,74 +30,87 @@ class S3Param(StrEnum):
     VERSION = "version"
 
 
-# - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
-# - specifying S3 storage parameters with environment variables can be done in two ways:
-#   1. specify the set
-#     {APP_PREFIX}_S3_ENGINE (one of 'aws', 'minio')
-#     {APP_PREFIX}_S3_ENDPOINT_URL
-#     {APP_PREFIX}_S3_BUCKET_NAME
-#     {APP_PREFIX}_S3_ACCESS_KEY
-#     {APP_PREFIX}_S3_SECRET_KEY
-#     {APP_PREFIX}_S3_SECURE_ACCESS
-#     {APP_PREFIX}_S3_REGION_NAME
-#   2. alternatively, specify a comma-separated list of servers in
-#     {APP_PREFIX}_S3_ENGINES
-#     and, for each engine, specify the set above, replacing 'S3' with
-#     'AWS' and 'MINIO', respectively, for the engines listed
+def __get_access_data() -> dict[S3Engine, dict[S3Param, Any]]:
+    """
+    Establish the access data for select S3 engines, from environment variables.
 
-_S3_ACCESS_DATA: dict[S3Engine, dict[S3Param, Any]] = {}
-_S3_ENGINES: list[S3Engine] = []
+    Tthe preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
+    specifying S3 storage parameters with environment variables can be done in two ways:
+      - 1. for a single S3 engine, specify the set
+           - *<APP_PREFIX>_S3_ENGINE* (one of 'aws', 'minio')
+           - *<APP_PREFIX>_S3_ENDPOINT_URL*
+           - *<APP_PREFIX>_S3_ACCESS_KEY*
+           - *<APP_PREFIX>_S3_SECRET_KEY*
+           - *<APP_PREFIX>_S3_SECURE_ACCESS*
+           - *<APP_PREFIX>_S3_REGION_NAME*
+      - 2. for multiple S3 engines, specify a comma-separated list of engines in
+           *<APP_PREFIX>_S3_ENGINES, and, for each engine, specify the set above, respectively replacing
+           *_S3_* with *_AWS_* and *_MINIO_*, for the engines listed
 
-_engine: str = env_get_str(key=f"{APP_PREFIX}_S3_ENGINE",
-                           values=list(map(str, S3Engine)))
-if _engine:
-    _default_setup: bool = True
-    _S3_ENGINES.append(S3Engine(_engine))
-else:
-    _default_setup: bool = False
-    _engines: list[str] = env_get_strs(key=f"{APP_PREFIX}_S3_ENGINES",
-                                       values=list(map(str, S3Engine)))
-    if _engines:
-        _S3_ENGINES.extend([S3Engine(v) for v in _engines])
-for _s3_engine in _S3_ENGINES:
-    if _default_setup:
-        _tag = "S3"
-        _default_setup = False
+    All required parameters mus be provided for the selected database engines, as there are no defaults.
+
+    :return: the access data for the selected S3 engines
+    """
+    # initialize the return variable
+    result: dict[S3Engine, dict[S3Param, Any]] = {}
+
+    engines: list[S3Engine] = []
+    single_engine: S3Engine = env_get_enum(key=f"{APP_PREFIX}_S3_ENGINE",
+                                           enum_class=S3Engine)
+    if single_engine:
+        default_setup: bool = True
+        engines.append(single_engine)
     else:
-        _tag = _s3_engine.upper()
-    _S3_ACCESS_DATA[_s3_engine] = {
-        S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{_tag}_ENDPOINT_URL"),
-        S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_BUCKET_NAME"),
-        S3Param.ACCESS_KEY:  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
-        S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
-        S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{_tag}_SECURE_ACCESS"),
-        S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_REGION_NAME"),
-        S3Param.VERSION: ""
-    }
+        default_setup: bool = False
+        multi_engines: list[S3Engine] = env_get_enums(key=f"{APP_PREFIX}_S3_ENGINES",
+                                                      enum_class=S3Engine)
+        if multi_engines:
+            engines.extend(multi_engines)
+
+    for engine in engines:
+        if default_setup:
+            prefix: str = "DB"
+            default_setup = False
+        else:
+            prefix: str = engine.name
+        result[engine] = {
+            S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{prefix}_ENDPOINT_URL"),
+            S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_BUCKET_NAME"),
+            S3Param.ACCESS_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_ACCESS_KEY"),
+            S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_SECRET_KEY"),
+            S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{prefix}_SECURE_ACCESS"),
+            S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_REGION_NAME"),
+            S3Param.VERSION: ""
+        }
+
+    return result
 
 
-def _assert_engine(errors: list[str],
-                   engine: S3Engine) -> S3Engine:
+# access data for the configured S3 engines
+_S3_ACCESS_DATA: Final[dict[S3Engine, dict[S3Param, Any]]] = __get_access_data()
+
+
+def _assert_engine(engine: S3Engine,
+                   errors: list[str] = None) -> S3Engine:
     """
     Verify if *engine* is in the list of supported engines.
 
     If *engine* is a supported engine, it is returned. If its value is *None*,
     the first engine in the list of supported engines (the default engine) is returned.
 
-    :param errors: incidental errors
     :param engine: the reference database engine
+    :param errors: incidental errors
     :return: the validated or the default engine
     """
     # initialize the return valiable
     result: S3Engine | None = None
 
-    if not engine and _S3_ENGINES:
-        result = _S3_ENGINES[0]
-    elif engine in _S3_ENGINES:
+    if not engine and _S3_ACCESS_DATA:
+        result = next(iter(_S3_ACCESS_DATA))
+    elif engine in _S3_ACCESS_DATA:
         result = engine
-    else:
-        err_msg = f"S3 engine '{engine}' unknown or not configured"
-        errors.append(err_msg)
+    elif isinstance(errors, list):
+        errors.append(f"S3 engine '{engine}' unknown or not configured")
 
     return result
 

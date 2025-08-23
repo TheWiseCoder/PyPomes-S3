@@ -5,8 +5,8 @@ from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    _S3_ENGINES, _S3_ACCESS_DATA,
-    S3Engine, S3Param, _assert_engine, _get_param, _except_msg
+    _S3_ACCESS_DATA, S3Engine, S3Param,
+    _assert_engine, _get_param, _except_msg
 )
 
 
@@ -49,8 +49,6 @@ def s3_setup(engine: S3Engine,
             S3Param.REGION_NAME: region_name,
             S3Param.VERSION: ""
         }
-        if engine not in _S3_ENGINES:
-            _S3_ENGINES.append(engine)
         result = True
 
     return result
@@ -66,7 +64,7 @@ def s3_get_engines() -> list[S3Engine]:
     :return: the *list* of configured engines
     """
     # SANITY-CHECK: return a cloned 'list'
-    return _S3_ENGINES.copy()
+    return list(_S3_ACCESS_DATA)
 
 
 def s3_get_param(key: S3Param,
@@ -81,11 +79,11 @@ def s3_get_param(key: S3Param,
     :param engine: the reference S3 engine (the default engine, if not provided)
     :return: the current value of the connection parameter, or *None* if not found
     """
-    # determine the S3 engine
-    curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
+    # assert the S3 engine
+    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
 
     # retrieve the connection parameter
-    return _get_param(engine=curr_engine,
+    return _get_param(engine=engine,
                       param=key)
 
 
@@ -101,16 +99,16 @@ def s3_get_params(engine: S3Engine = None) -> dict[S3Param, Any] | None:
     :param engine: the database engine
     :return: the current connection parameters for the engine, or *None* if not found
     """
-    # determine the S3 engine
-    curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
+    # assert the S3 engine
+    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
 
     # return the connection parameters
-    return _S3_ACCESS_DATA.get(curr_engine).copy() if curr_engine in _S3_ACCESS_DATA else None
+    return _S3_ACCESS_DATA[engine].copy() if engine in _S3_ACCESS_DATA else None
 
 
-def s3_startup(errors: list[str] | None,
-               engine: S3Engine = None,
+def s3_startup(engine: S3Engine = None,
                bucket: str = None,
+               errors: list[str] = None,
                logger: Logger = None) -> bool:
     """
     Prepare the S3 client for operations.
@@ -118,9 +116,9 @@ def s3_startup(errors: list[str] | None,
     This function should be called just once, at startup,
     to make sure the interaction with the S3 service is fully functional.
 
-    :param errors: incidental error messages
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param bucket: the bucket to use
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: *True* if service is fully functional, *False* otherwise
     """
@@ -131,8 +129,8 @@ def s3_startup(errors: list[str] | None,
     op_errors: list[str] = []
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=op_errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=op_errors)
     if not op_errors:
         # determine if 'curr_engine' has been prepared for operations
         version: str = _S3_ACCESS_DATA[curr_engine].get(S3Param.VERSION)
@@ -144,13 +142,13 @@ def s3_startup(errors: list[str] | None,
                                           param=S3Param.BUCKET_NAME)
             if curr_engine == S3Engine.AWS:
                 from . import aws_pomes
-                result = aws_pomes.startup(errors=op_errors,
-                                           bucket=bucket,
+                result = aws_pomes.startup(bucket=bucket,
+                                           errors=op_errors,
                                            logger=logger)
             elif curr_engine == S3Engine.MINIO:
                 from . import minio_pomes
-                result = minio_pomes.startup(errors=op_errors,
-                                             bucket=bucket,
+                result = minio_pomes.startup(bucket=bucket,
+                                             errors=op_errors,
                                              logger=logger)
             if not op_errors:
                 _S3_ACCESS_DATA[curr_engine][S3Param.VERSION] = __get_version(engine=curr_engine)
@@ -162,16 +160,16 @@ def s3_startup(errors: list[str] | None,
     return result
 
 
-def s3_get_client(errors: list[str] | None,
-                  engine: S3Engine = None,
+def s3_get_client(engine: S3Engine = None,
+                  errors: list[str] = None,
                   logger: Logger = None) -> Any:
     """
     Obtain and return a client to *engine*, or *None* if the client cannot be obtained.
 
     The target S3 engine, default or specified, must have been previously configured.
 
-    :param errors: incidental error messages
     :param engine: the S3 engine to use (uses the default engine, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the client to the S3 engine, or *None* if the client cannot be obtained
     """
@@ -182,8 +180,8 @@ def s3_get_client(errors: list[str] | None,
     op_errors: list[str] = []
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=op_errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=op_errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
         result = aws_pomes.get_client(errors=op_errors,
@@ -199,24 +197,24 @@ def s3_get_client(errors: list[str] | None,
     return result
 
 
-def s3_data_retrieve(errors: list[str] | None,
-                     identifier: str,
+def s3_data_retrieve(identifier: str,
                      prefix: str | Path = None,
                      data_range: tuple[int, int] = None,
                      bucket: str = None,
                      engine: S3Engine = None,
                      client: Any = None,
+                     errors: list[str] = None,
                      logger: Logger = None) -> bytes | None:
     """
     Retrieve data from the *S3* store.
 
-    :param errors: incidental error messages
     :param identifier: the data identifier
     :param prefix: optional path prefixing the item to be retrieved
     :param data_range: the begin-end positions within the data (in bytes, defaults to *None* - all bytes)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the bytes retrieved, or *None* if error or data not found
     """
@@ -224,31 +222,30 @@ def s3_data_retrieve(errors: list[str] | None,
     result: bytes | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.data_retrieve(errors=errors,
-                                         identifier=identifier,
+        result = aws_pomes.data_retrieve(identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          data_range=data_range,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.data_retrieve(errors=errors,
-                                           identifier=identifier,
+        result = minio_pomes.data_retrieve(identifier=identifier,
                                            prefix=prefix,
                                            bucket=bucket,
                                            data_range=data_range,
                                            client=client,
+                                           errors=errors,
                                            logger=logger)
     return result
 
 
-def s3_data_store(errors: list[str] | None,
-                  identifier: str,
+def s3_data_store(identifier: str,
                   data: bytes | str | BinaryIO,
                   length: int,
                   prefix: str | Path = None,
@@ -257,6 +254,7 @@ def s3_data_store(errors: list[str] | None,
                   bucket: str = None,
                   engine: S3Engine = None,
                   client: Any = None,
+                  errors: list[str] = None,
                   logger: Logger = None) -> dict[str, str] | None:
     """
     Store data at the *S3* store.
@@ -268,7 +266,6 @@ def s3_data_store(errors: list[str] | None,
     in the responses. In fact, the responses vary wildly with the different *S3* implementations.
     It should also be noted that those responses are not guaranteed to be serializable.
 
-    :param errors: incidental error messages
     :param identifier: the data identifier
     :param data: the data to store
     :param length: the length of the data
@@ -278,6 +275,7 @@ def s3_data_store(errors: list[str] | None,
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: stored item's properties, or *None* if error
     """
@@ -285,12 +283,11 @@ def s3_data_store(errors: list[str] | None,
     result: bool | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.data_store(errors=errors,
-                                      identifier=identifier,
+        result = aws_pomes.data_store(identifier=identifier,
                                       data=data,
                                       bucket=bucket,
                                       prefix=prefix,
@@ -298,11 +295,11 @@ def s3_data_store(errors: list[str] | None,
                                       mimetype=mimetype,
                                       tags=tags,
                                       client=client,
+                                      errors=errors,
                                       logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.data_store(errors=errors,
-                                        identifier=identifier,
+        result = minio_pomes.data_store(identifier=identifier,
                                         data=data,
                                         bucket=bucket,
                                         prefix=prefix,
@@ -310,28 +307,29 @@ def s3_data_store(errors: list[str] | None,
                                         mimetype=mimetype,
                                         tags=tags,
                                         client=client,
+                                        errors=errors,
                                         logger=logger)
     return result
 
 
-def s3_file_retrieve(errors: list[str] | None,
-                     identifier: str,
+def s3_file_retrieve(identifier: str,
                      filepath: Path | str,
                      bucket: str = None,
                      prefix: str | Path = None,
                      engine: S3Engine = None,
                      client: Any = None,
+                     errors: list[str] = None,
                      logger: Logger = None) -> bool | None:
     """
     Retrieve a file from the *S3* store.
 
-    :param errors: incidental error messages
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path prefixing the item to retrieve as a file
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: *True* if the file was retrieved, *False* otherwise, or *None* if error
     """
@@ -339,31 +337,30 @@ def s3_file_retrieve(errors: list[str] | None,
     result: bool | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.file_retrieve(errors=errors,
-                                         identifier=identifier,
+        result = aws_pomes.file_retrieve(identifier=identifier,
                                          filepath=filepath,
                                          bucket=bucket,
                                          prefix=prefix,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.file_retrieve(errors=errors,
-                                           identifier=identifier,
+        result = minio_pomes.file_retrieve(identifier=identifier,
                                            filepath=filepath,
                                            bucket=bucket,
                                            prefix=prefix,
                                            client=client,
+                                           errors=errors,
                                            logger=logger)
     return result
 
 
-def s3_file_store(errors: list[str] | None,
-                  identifier: str,
+def s3_file_store(identifier: str,
                   filepath: Path | str,
                   mimetype: Mimetype | str,
                   tags: dict = None,
@@ -371,11 +368,11 @@ def s3_file_store(errors: list[str] | None,
                   prefix: str | Path = None,
                   engine: S3Engine = None,
                   client: Any = None,
+                  errors: list[str] = None,
                   logger: Logger = None) -> bool:
     """
     Store a file at the *S3* store.
 
-    :param errors: incidental error messages
     :param identifier: the file identifier, tipically a file name
     :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
@@ -384,6 +381,7 @@ def s3_file_store(errors: list[str] | None,
     :param prefix: optional path prefixing the item holding the file data
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: *True* if the file was successfully stored, *False* if error
     """
@@ -391,49 +389,49 @@ def s3_file_store(errors: list[str] | None,
     result: bool = False
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.file_store(errors=errors,
-                                      identifier=identifier,
+        result = aws_pomes.file_store(identifier=identifier,
                                       filepath=filepath,
                                       mimetype=mimetype,
                                       bucket=bucket,
                                       prefix=prefix,
                                       tags=tags,
                                       client=client,
+                                      errors=errors,
                                       logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.file_store(errors=errors,
-                                        identifier=identifier,
+        result = minio_pomes.file_store(identifier=identifier,
                                         filepath=filepath,
                                         mimetype=mimetype,
                                         bucket=bucket,
                                         prefix=prefix,
                                         tags=tags,
                                         client=client,
+                                        errors=errors,
                                         logger=logger)
     return result
 
 
-def s3_object_retrieve(errors: list[str] | None,
-                       identifier: str,
+def s3_object_retrieve(identifier: str,
                        bucket: str = None,
                        prefix: str | Path = None,
                        engine: S3Engine = None,
                        client: Any = None,
+                       errors: list[str] = None,
                        logger: Logger = None) -> Any:
     """
     Retrieve an object from the *S3* store.
 
-    :param errors: incidental error messages
     :param identifier: the object identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path prefixing the item to retrieve as object
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the object retrieved, or *None* if error or object not found
     """
@@ -441,12 +439,12 @@ def s3_object_retrieve(errors: list[str] | None,
     result: Any = None
 
     # retrieve the data
-    data: bytes = s3_data_retrieve(errors=errors,
-                                   identifier=identifier,
+    data: bytes = s3_data_retrieve(identifier=identifier,
                                    bucket=bucket,
                                    prefix=prefix,
                                    engine=engine,
                                    client=client,
+                                   errors=errors,
                                    logger=logger)
     # was the data obtained ?
     if data:
@@ -460,14 +458,14 @@ def s3_object_retrieve(errors: list[str] | None,
     return result
 
 
-def s3_object_store(errors: list[str] | None,
-                    identifier: str,
+def s3_object_store(identifier: str,
                     obj: Any,
                     tags: dict = None,
                     bucket: str = None,
                     prefix: str | Path = None,
                     engine: S3Engine = None,
                     client: Any = None,
+                    errors: list[str] = None,
                     logger: Logger = None) -> dict[str, str] | None:
     """
     Store an object at the *S3* store.
@@ -477,7 +475,6 @@ def s3_object_store(errors: list[str] | None,
       - *version_id*: The version ID of the object, if versioning is enabled on the bucket
       - *etag*: The entity tag (ETag) of the object, which is a unique identifier for the object's content
 
-    :param errors: incidental error messages
     :param identifier: the object identifier
     :param obj: object to be stored
     :param tags: optional metadatatagsdescribing the object
@@ -485,6 +482,7 @@ def s3_object_store(errors: list[str] | None,
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path prefixing the item holding the the object
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the stored item's properties listed above, or *None* if error
     """
@@ -502,8 +500,7 @@ def s3_object_store(errors: list[str] | None,
     # was the data obtained ?
     if data:
         # yes, store the serialized object
-        result = s3_data_store(errors=errors,
-                               identifier=identifier,
+        result = s3_data_store(identifier=identifier,
                                data=data,
                                length=len(data),
                                mimetype=Mimetype.BINARY,
@@ -512,26 +509,27 @@ def s3_object_store(errors: list[str] | None,
                                prefix=prefix,
                                engine=engine,
                                client=client,
+                               errors=errors,
                                logger=logger)
     return result
 
 
-def s3_item_exists(errors: list[str] | None,
-                   identifier: str,
+def s3_item_exists(identifier: str,
                    prefix: str | Path = None,
                    bucket: str = None,
                    engine: S3Engine = None,
                    client: Any = None,
+                   errors: list[str] = None,
                    logger: Logger = None) -> bool | None:
     """
     Determine if a given item exists in the *S3* store.
 
-    :param errors: incidental error messages
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item to be located
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: *True* if the item was found, *False* otherwise, *None* if error
     """
@@ -539,12 +537,12 @@ def s3_item_exists(errors: list[str] | None,
     result: bool | None = None
 
     # get info about this object
-    item_info: dict[str, Any] = s3_item_get_info(errors=errors,
-                                                 identifier=identifier,
+    item_info: dict[str, Any] = s3_item_get_info(identifier=identifier,
                                                  prefix=prefix,
                                                  bucket=bucket,
                                                  engine=engine,
                                                  client=client,
+                                                 errors=errors,
                                                  logger=logger)
     if item_info:
         result = isinstance(item_info, dict) and len(item_info) > 0
@@ -552,12 +550,12 @@ def s3_item_exists(errors: list[str] | None,
     return result
 
 
-def s3_item_get_info(errors: list[str] | None,
-                     identifier: str,
+def s3_item_get_info(identifier: str,
                      prefix: str | Path = None,
                      bucket: str = None,
                      engine: S3Engine = None,
                      client: Any = None,
+                     errors: list[str] = None,
                      logger: Logger = None) -> Any:
     """
     Retrieve the information about an item in the *S3* store.
@@ -565,12 +563,12 @@ def s3_item_get_info(errors: list[str] | None,
     The information returned depends on the *engine* in question, and can be viewed at the
     native invocation's *docstring*.
 
-    :param errors: incidental error messages
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: information about the item, or *None* if error or item not found
     """
@@ -578,33 +576,33 @@ def s3_item_get_info(errors: list[str] | None,
     result: Any | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_get_info(errors=errors,
-                                         identifier=identifier,
+        result = aws_pomes.item_get_info(identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_get_info(errors=errors,
-                                           identifier=identifier,
+        result = minio_pomes.item_get_info(identifier=identifier,
                                            prefix=prefix,
                                            bucket=bucket,
                                            client=client,
+                                           errors=errors,
                                            logger=logger)
     return result
 
 
-def s3_item_get_tags(errors: list[str] | None,
-                     identifier: str,
+def s3_item_get_tags(identifier: str,
                      prefix: str | Path = None,
                      bucket: str = None,
                      engine: S3Engine = None,
                      client: Any = None,
+                     errors: list[str] = None,
                      logger: Logger = None) -> dict[str, Any] | None:
     """
     Retrieve the existing metadata tags for an item in the *S3* store.
@@ -612,12 +610,12 @@ def s3_item_get_tags(errors: list[str] | None,
     If item has no associated metadata tags, an empty *dict* is returned. The information returned depends
     on the *engine* in question, and can be viewed at the native invocation's *docstring*.
 
-    :param errors: incidental error messages
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the metadata tags associated with the item, or *None* if error or item not found
     """
@@ -625,47 +623,47 @@ def s3_item_get_tags(errors: list[str] | None,
     result: dict[str, Any] | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_get_tags(errors=errors,
-                                         identifier=identifier,
+        result = aws_pomes.item_get_tags(identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_get_tags(errors=errors,
-                                           identifier=identifier,
+        result = minio_pomes.item_get_tags(identifier=identifier,
                                            prefix=prefix,
                                            bucket=bucket,
                                            client=client,
+                                           errors=errors,
                                            logger=logger)
     return result
 
 
-def s3_item_remove(errors: list[str] | None,
-                   identifier: str,
+def s3_item_remove(identifier: str,
                    prefix: str | Path = None,
                    version: str = None,
                    bucket: str = None,
                    engine: S3Engine = None,
                    client: Any = None,
+                   errors: list[str] = None,
                    logger: Logger = None) -> int | None:
     """
     Remove an item from the *S3* store.
 
     If *version* is not specified, then only the item's current (latest) version is removed.
 
-    :param errors: incidental error messages
     :param identifier: the item identifier
     :param prefix: optional path prefixing the items to be removed
     :param version: optional version of the item to be removed (defaults to the its current version)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: *True* if the item was successfully removed, *False* otherwise, *None* if error
     """
@@ -673,35 +671,35 @@ def s3_item_remove(errors: list[str] | None,
     result: bool | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_remove(errors=errors,
-                                       identifier=identifier,
+        result = aws_pomes.item_remove(identifier=identifier,
                                        prefix=prefix,
                                        version=version,
                                        bucket=bucket,
                                        client=client,
+                                       errors=errors,
                                        logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_remove(errors=errors,
-                                         identifier=identifier,
+        result = minio_pomes.item_remove(identifier=identifier,
                                          prefix=prefix,
                                          version=version,
                                          bucket=bucket,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     return result
 
 
-def s3_items_remove(errors: list[str] | None,
-                    identifiers: list[str | tuple[str, str]],
+def s3_items_remove(identifiers: list[str | tuple[str, str]],
                     prefix: str | Path = None,
                     bucket: str = None,
                     engine: S3Engine = None,
                     client: Any = None,
+                    errors: list[str] = None,
                     logger: Logger = None) -> int:
     """
     Remove the items listed in *identifiers* from the *S3* store.
@@ -713,12 +711,12 @@ def s3_items_remove(errors: list[str] | None,
     The removal operation will attempt to continue if errors occur. Thus, make sure to check *errors*,
     besides inspecting the returned value.
 
-    :param errors: incidental error messages
     :param identifiers: identifiers for the items to be removed (defaults to all items in *prefix*)
     :param prefix: optional path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: The number of items successfully removed
     """
@@ -726,32 +724,32 @@ def s3_items_remove(errors: list[str] | None,
     result: int = 0
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.items_remove(errors=errors,
-                                        identifiers=identifiers,
+        result = aws_pomes.items_remove(identifiers=identifiers,
                                         bucket=bucket,
                                         prefix=prefix,
                                         client=client,
+                                        errors=errors,
                                         logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.items_remove(errors=errors,
-                                          identifiers=identifiers,
+        result = minio_pomes.items_remove(identifiers=identifiers,
                                           bucket=bucket,
                                           prefix=prefix,
                                           client=client,
+                                          errors=errors,
                                           logger=logger)
     return result
 
 
-def s3_prefix_count(errors: list[str] | None,
-                    prefix: str | Path | None,
+def s3_prefix_count(prefix: str | Path | None,
                     bucket: str = None,
                     engine: S3Engine = None,
                     client: Any = None,
+                    errors: list[str] = None,
                     logger: Logger = None) -> int | None:
     """
     Retrieve the number of items prefixed with *prefix*, in the *S3* store.
@@ -759,11 +757,11 @@ def s3_prefix_count(errors: list[str] | None,
     If *prefix* is not specified, then the bucket's root is used. A count operation on the contents
     of a *prefix* may be time-consuming, in *AWS* storages, and extremely so, in *MinIO* storages.
 
-    :param errors: incidental error messages
     :param prefix: path prefixing the items to be counted
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: the number of items in *prefix*, 0 if *prefix* not found, or *None* if error
     """
@@ -771,32 +769,32 @@ def s3_prefix_count(errors: list[str] | None,
     result: int | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.prefix_count(errors=errors,
-                                        bucket=bucket,
+        result = aws_pomes.prefix_count(bucket=bucket,
                                         prefix=prefix,
                                         client=client,
+                                        errors=errors,
                                         logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.prefix_count(errors=errors,
-                                          bucket=bucket,
+        result = minio_pomes.prefix_count(bucket=bucket,
                                           prefix=prefix,
                                           client=client,
+                                          errors=errors,
                                           logger=logger)
     return result
 
 
-def s3_prefix_list(errors: list[str] | None,
-                   prefix: str | Path,
+def s3_prefix_list(prefix: str | Path,
                    max_count: int = None,
                    start_after: str = None,
                    bucket: str = None,
                    engine: S3Engine = None,
                    client: Any = None,
+                   errors: list[str] = None,
                    logger: Logger = None) -> list[dict[str, Any]] | None:
     """
     Recursively retrieve and return information on a list of items prefixed with *prefix*, in the *S3* store.
@@ -809,13 +807,13 @@ def s3_prefix_list(errors: list[str] | None,
     The information returned depends on the *engine* in question, and can be viewed at the native
     invocation's *docstring*.
 
-    :param errors: incidental error messages
     :param prefix: path prefixing the items to be listed
     :param max_count: the maximum number of items to return (defaults to all items)
     :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: information on a list of items in *prefix*, or *None* if error or *prefix* not found
     """
@@ -823,34 +821,34 @@ def s3_prefix_list(errors: list[str] | None,
     result: list[dict[str, Any]] | None = None
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.prefix_list(errors=errors,
-                                       prefix=prefix,
+        result = aws_pomes.prefix_list(prefix=prefix,
                                        max_count=max_count,
                                        start_after=start_after,
                                        bucket=bucket,
                                        client=client,
+                                       errors=errors,
                                        logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.prefix_list(errors=errors,
-                                         prefix=prefix,
+        result = minio_pomes.prefix_list(prefix=prefix,
                                          max_count=max_count,
                                          start_after=start_after,
                                          bucket=bucket,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     return result
 
 
-def s3_prefix_remove(errors: list[str] | None,
-                     prefix: str | Path | None,
+def s3_prefix_remove(prefix: str | Path | None,
                      bucket: str = None,
                      engine: S3Engine = None,
                      client: Any = None,
+                     errors: list[str] = None,
                      logger: Logger = None) -> int:
     """
     Remove the items prefixed with *prefix* from the *S3* store.
@@ -860,11 +858,11 @@ def s3_prefix_remove(errors: list[str] | None,
     will attempt to continue if errors occur. Thus, make sure to check *errors*, besides inspecting
     the returned value.
 
-    :param errors: incidental error messages
     :param prefix: path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages
     :param logger: optional logger
     :return: The number of items successfully removed
     """
@@ -872,21 +870,21 @@ def s3_prefix_remove(errors: list[str] | None,
     result: int = 0
 
     # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(errors=errors,
-                                           engine=engine)
+    curr_engine: S3Engine = _assert_engine(engine=engine,
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.prefix_remove(errors=errors,
-                                         prefix=prefix,
+        result = aws_pomes.prefix_remove(prefix=prefix,
                                          bucket=bucket,
                                          client=client,
+                                         errors=errors,
                                          logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.prefix_remove(errors=errors,
-                                           prefix=prefix,
+        result = minio_pomes.prefix_remove(prefix=prefix,
                                            bucket=bucket,
                                            client=client,
+                                           errors=errors,
                                            logger=logger)
     return result
 
@@ -901,10 +899,10 @@ def __get_version(engine: S3Engine = None) -> str | None:
     # initialize the return variable
     result: str | None = None
 
-    # determine the database engine
-    curr_engine: S3Engine = _S3_ENGINES[0] if not engine and _S3_ENGINES else engine
+    # assert the S3 engine
+    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
 
-    match curr_engine:
+    match engine:
         case S3Engine.MINIO:
             import minio
             result = minio.__version__
