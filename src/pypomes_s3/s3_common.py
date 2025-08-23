@@ -26,6 +26,7 @@ class S3Param(StrEnum):
     SECRET_KEY = "secret-key"
     SECURE_ACCESS = "secure-access"
     REGION_NAME = "region-name"
+    VERSION = "version"
 
 
 # - the preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
@@ -69,7 +70,8 @@ for _s3_engine in _S3_ENGINES:
         S3Param.ACCESS_KEY:  env_get_str(key=f"{APP_PREFIX}_{_tag}_ACCESS_KEY"),
         S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{_tag}_SECRET_KEY"),
         S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{_tag}_SECURE_ACCESS"),
-        S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_REGION_NAME")
+        S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{_tag}_REGION_NAME"),
+        S3Param.VERSION: ""
     }
 
 
