@@ -125,13 +125,14 @@ def s3_startup(engine: S3Engine = None,
     # initialize the return variable
     result: bool = False
 
-    # initialize the local errors list
-    op_errors: list[str] = []
+    # make sure to have an errors list
+    if not isinstance(errors, list):
+        errors = []
 
     # determine the S3 engine
     curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=op_errors)
-    if not op_errors:
+                                           errors=errors)
+    if not errors:
         # determine if 'curr_engine' has been prepared for operations
         version: str = _S3_ACCESS_DATA[curr_engine].get(S3Param.VERSION)
         if version:
@@ -143,19 +144,15 @@ def s3_startup(engine: S3Engine = None,
             if curr_engine == S3Engine.AWS:
                 from . import aws_pomes
                 result = aws_pomes.startup(bucket=bucket,
-                                           errors=op_errors,
+                                           errors=errors,
                                            logger=logger)
             elif curr_engine == S3Engine.MINIO:
                 from . import minio_pomes
                 result = minio_pomes.startup(bucket=bucket,
-                                             errors=op_errors,
+                                             errors=errors,
                                              logger=logger)
-            if not op_errors:
+            if not errors:
                 _S3_ACCESS_DATA[curr_engine][S3Param.VERSION] = __get_version(engine=curr_engine)
-
-    # acknowledge local errors
-    if isinstance(errors, list):
-        errors.extend(op_errors)
 
     return result
 
@@ -176,24 +173,17 @@ def s3_get_client(engine: S3Engine = None,
     # initialize the return variable
     result: Any = None
 
-    # initialize the local errors list
-    op_errors: list[str] = []
-
     # determine the S3 engine
     curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=op_errors)
+                                           errors=errors)
     if curr_engine == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.get_client(errors=op_errors,
+        result = aws_pomes.get_client(errors=errors,
                                       logger=logger)
     elif curr_engine == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.get_client(errors=op_errors,
+        result = minio_pomes.get_client(errors=errors,
                                         logger=logger)
-    # acknowledge local errors
-    if isinstance(errors, list):
-        errors.extend(op_errors)
-
     return result
 
 

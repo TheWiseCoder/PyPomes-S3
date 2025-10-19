@@ -69,7 +69,7 @@ def __get_access_data() -> dict[S3Engine, dict[S3Param, Any]]:
 
     for engine in engines:
         if default_setup:
-            prefix: str = "DB"
+            prefix: str = "S3"
             default_setup = False
         else:
             prefix: str = engine.name
@@ -147,7 +147,7 @@ def _except_msg(exception: Exception,
     :return: the formatted error message
     """
     endpoint: str = (_S3_ACCESS_DATA.get(engine) or {}).get(S3Param.ENDPOINT_URL)
-    return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(source=f'{exception}')}"
+    return f"Error accessing '{engine}' at '{endpoint}': {str_sanitize(f'{exception}')}"
 
 
 def _normalize_tags(tags: dict[str, str]) -> dict[str, str]:
