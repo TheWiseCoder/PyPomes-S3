@@ -657,12 +657,12 @@ def items_remove(identifiers: list[str | tuple[str, str]],
             try:
                 reply: dict[str, Any] = client.delete_objects(Bucket=bucket,
                                                               Delete=deletes)
-                result += len(reply.get("Deleted") or [])
+                result += len(reply.get("Deleted", []))
                 # acknowledge errors eventually reported
                 if isinstance(errors, list):
                     errors.extend([f"Error {e.get('Code')} ({e.get('Message')}) "
                                    f"removing document ({e.get('Key')}, v. {e.get('VersionId')}"
-                                   for e in (reply.get("Errors") or [])])
+                                   for e in reply.get("Errors", [])])
             except Exception as e:
                 msg: str = _except_msg(exception=e,
                                        engine=S3Engine.AWS)
@@ -910,12 +910,12 @@ def prefix_remove(prefix: str | Path,
                 try:
                     reply: dict[str, Any] = client.delete_objects(Bucket=bucket,
                                                                   Delete=deletes)
-                    result += len(reply.get("Deleted") or [])
+                    result += len(reply.get("Deleted", []))
                     # acknowledge errors eventually reported
                     if isinstance(errors, list):
                         errors.extend([f"Error {e.get('Code')} ({e.get('Message')}) "
                                        f"removing document ({e.get('Key')}, v. {e.get('VersionId')}"
-                                       for e in (reply.get("Errors") or [])])
+                                       for e in reply.get("Errors", [])])
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
                                            engine=S3Engine.AWS)
