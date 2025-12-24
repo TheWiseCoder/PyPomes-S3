@@ -4,6 +4,7 @@ from pypomes_core import (
     env_get_enum, env_get_enums, str_sanitize
 )
 from enum import StrEnum, auto
+from logging import Logger
 from typing import Any, Final
 from unidecode import unidecode
 
@@ -88,6 +89,12 @@ def __get_access_data() -> dict[S3Engine, dict[S3Param, Any]]:
 
 # access data for the configured S3 engines
 _S3_ACCESS_DATA: Final[dict[S3Engine, dict[S3Param, Any]]] = __get_access_data()
+
+# S3 loggers
+_S3_LOGGERS: Final[dict[S3Engine, Logger | None]] = {
+    S3Engine.AWS: None,
+    S3Engine.MINIO: None
+}
 
 
 def _assert_engine(engine: S3Engine,
