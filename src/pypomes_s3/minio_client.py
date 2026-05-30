@@ -21,7 +21,7 @@ class MinioCM:
                  credentials: Provider | None = None,
                  cert_check: bool = True) -> None:
         """
-        Extend *MinIO* package's implementation of a Simple Storage Service (*S3*) client, .
+        Extend *MinIO* package's implementation of a Simple Storage Service (*S3*) client.
 
         The aim is to provide context-managed *MinIO* clients.
         Please, refer to the *MinIO* package documentation for details on its implementation.
@@ -61,6 +61,7 @@ class MinioCM:
         """
         Last step in providing a context-managed *MinIO* client.
         """
+        # noinspection PyTypeChecker
         self.minio_client = None
 
         # make sure an eventual exception is propagated

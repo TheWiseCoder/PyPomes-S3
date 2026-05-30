@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import timedelta
 from io import BytesIO
 from minio import Minio
 from minio.commonconfig import Tags
@@ -155,6 +156,10 @@ def data_store(identifier: str,
     Store *data* at the *MinIO* store.
 
     In case *length* cannot be determined, it should be set to *-1*.
+    Note that *length* is the number of bytes of *data* to be stored. This might lead to error when storing
+    strings. In Python, a standard string is a sequence of Unicode code points, not bytes, and thus:
+      - *len(string)*: returns the number of characters (Unicode code points)
+      - *len(string.encode('utf-8'))*: returns the number of bytes the string occupies when encoded
 
     On success, this operation returns a *dict* obtained from converting the
     *ObjectWriteResult* object returned from the native invocation.
@@ -332,6 +337,7 @@ def file_store(identifier: str,
 
 
 def item_get_info(identifier: str,
+                  attributes: list[str],
                   bucket: str = None,
                   prefix: str | Path = None,
                   client: Minio = None,
@@ -340,7 +346,8 @@ def item_get_info(identifier: str,
     Retrieve information about an item in the *MinIO* store.
 
     The item might be interpreted as unspecified data, a file, or an object.
-    The information about the item might include:
+    The complete information that can be returned is shown below. The parameter *attributes* must contain
+    one or more of the attributes listed, or *None* or an empty list for the complete set to be returned:
         - *last_modified*: the date and time the item was last modified
         - *size*: the size of the item in bytes
         - *etag*: a hash of the item
@@ -348,6 +355,7 @@ def item_get_info(identifier: str,
         - *version_id*: the version of the item, if bucket versioning is enabled
 
     :param identifier: the item identifier
+    :param attributes: the item's attributes to be returned
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path specifying where to locate the item
     :param client: optional MinIO client (obtains a new one, if not provided)
@@ -371,6 +379,7 @@ def item_get_info(identifier: str,
                 obj_name: str = identifier
             stats: MinioObject = client.stat_object(bucket_name=bucket,
                                                     object_name=obj_name)
+            # retrieve mutable key-value pairs from the '__dict__' attribute of 'stats'
             result = vars(stats)
             if _S3_LOGGERS[S3Engine.MINIO]:
                 _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Got info for '{obj_name}', bucket '{bucket}'")
@@ -383,6 +392,12 @@ def item_get_info(identifier: str,
                     _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
+
+    if result and attributes:
+        for attr in result.copy():
+            if attr not in attributes:
+                result.pop(attr)
+
     return result
 
 
@@ -491,77 +506,90 @@ def item_remove(identifier: str,
     return result
 
 
-def items_remove(identifiers: list[str | tuple[str, str]],
-                 prefix: str | Path = None,
-                 bucket: str = None,
-                 client: Minio = None,
-                 errors: list[str] = None) -> int:
+def items_get_info(attributes: list[str],
+                   prefix: str | Path,
+                   max_count: int = None,
+                   start_after: str = None,
+                   bucket: str = None,
+                   client: Minio = None,
+                   errors: list[str] = None) -> list[dict[str, Any]] | None:
     """
-    Remove the items listed in *identifiers* from the *MinIO* store.
+    Recursively retrieve and return information on a list of items prefixed with *prefix*, in the *MinIO* store.
 
-    The items to be removed are listed in *identifiers*, either with a simple *name*, or with
-    a *name,version* pair. If the version is not provided for a given item, then only its
-    current (latest) version is removed. Items in *identifiers* are ignored, if not found.
+    If *prefix* is not specified, then the bucket's root is used. If *max_count* is a positive integer,
+    the number of items returned may be less, but not more, than its value, otherwise it is ignored, and
+    all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
+    the listing must start, thus allowing for paginating the items retrieval operation.
 
-    The removal operation will attempt to continue if errors occur. Thus, make sure to check *errors*,
-    besides inspecting the returned value.
+    The information returned by the native invocation is shown below, lexicographically sorted by *object_name*.
+        - *object_name*: the name of the item
+        - *last_modified*: the date and time the item was last modified
+        - *size*: the size of the item in bytes
+        - *etag*: a hash of the item
+        - *is_dir*: a *bool* indicating if the item is a directory
+        - *version_id*: the version of the item, if bucket versioning is enabled
 
-    :param identifiers: identifiers for the items to be removed (defaults to all items in *prefix*)
-    :param prefix: optional path prefixing the items to be removed
+    :param attributes: the items' attributes to be returned
+    :param prefix: path prefixing the items to be listed
+    :param max_count: the maximum number of items to return
+    :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
-    :return: The number of items successfully removed
+    :return: the iterator into the list of items, or *None* if path not found or error
     """
     # initialize the return variable
-    result: int = 0
+    result: list[dict[str, Any]] | None = None
 
     # make sure to have a client
     client = client or get_client(errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine=S3Engine.MINIO,
                                       param=S3Param.BUCKET_NAME)
-        # establish a path prefix
-        path: Path = Path(prefix) if isinstance(prefix, str) else prefix
+        # must terminate with '/', otherwise only the folder is considered
+        path: str = Path(prefix).as_posix() + "/" if prefix else None
+        try:
+            items: list[dict[str, Any]] = []
+            proceed: bool = True
+            while proceed:
+                # obtain an iterator on the items in the folder
+                iterator: Iterator[MinioObject] = client.list_objects(bucket_name=bucket,
+                                                                      prefix=path,
+                                                                      include_user_meta=True,
+                                                                      recursive=True,
+                                                                      start_after=start_after)
+                # traverse the iterator (it might be empty)
+                proceed = False
+                for obj in iterator:
+                    items.append(vars(obj))
+                    if max_count and len(items) == max_count:
+                        break
+                    start_after = obj.object_name
+                    proceed = True
 
-        # a maximum of 1000 items is used for convenience
-        pos: int = 0
-        size: int = min(1000, len(identifiers))
-        while size > 0:
-            deletes: list[DeleteObject] = []
-            for identifier in identifiers[pos:pos+size]:
-                if isinstance(identifier, tuple):
-                    deletes.append(DeleteObject(name=(path / identifier[0]).as_posix() if path else identifier[0],
-                                                version_id=identifier[1]))
-                else:
-                    # noinspection PyTypeChecker
-                    deletes.append(DeleteObject(name=(path / identifier).as_posix() if path else identifier))
-            try:
-                reply: Iterator[DeleteError] = client.remove_objects(bucket_name=bucket,
-                                                                     delete_object_list=deletes)
-                # acknowledge errors eventually reported
-                if isinstance(errors, list):
-                    errors.extend([f"Error {e.code} ({e.message}) "
-                                   f"removing document ({e.name}, v. {e.version_id}"
-                                   for e in (reply or [])])
-            except Exception as e:
-                msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
-                if isinstance(errors, list):
-                    errors.append(msg)
-            pos += size
-            size = min(1000, len(identifiers) - pos)
+            # save the items and log the results
+            result = []
+            for item in items:
+                result.append({k: v for k, v in item.items() if k in attributes})
+            if _S3_LOGGERS[S3Engine.MINIO]:
+                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Listed {len(result)} "
+                                                      f"items in '{prefix}', bucket '{bucket}'")
+        except Exception as e:
+            msg: str = _except_msg(exception=e,
+                                   engine=S3Engine.MINIO)
+            if _S3_LOGGERS[S3Engine.MINIO]:
+                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+            if isinstance(errors, list):
+                errors.append(msg)
 
     return result
 
 
-def prefix_count(prefix: str | Path | None,
-                 bucket: str = None,
-                 client: Minio = None,
-                 errors: list[str] = None) -> int | None:
+def items_count(prefix: str | Path | None,
+                bucket: str = None,
+                client: Minio = None,
+                errors: list[str] = None) -> int | None:
     """
     Retrieve the number of items prefixed with *prefix*, in the *MinIO* store.
 
@@ -618,78 +646,78 @@ def prefix_count(prefix: str | Path | None,
     return result
 
 
-def prefix_list(prefix: str | Path,
-                max_count: int = None,
-                start_after: str = None,
-                bucket: str = None,
-                client: Minio = None,
-                errors: list[str] = None) -> list[dict[str, Any]] | None:
+def items_remove(identifiers: list[str | tuple[str, str]] = None,
+                 prefix: str | Path = None,
+                 bucket: str = None,
+                 client: Minio = None,
+                 errors: list[str] = None) -> int:
     """
-    Recursively retrieve and return information on a list of items prefixed with *prefix*, in the *MinIO* store.
+    Remove the items listed in *identifiers* from the *MinIO* store.
 
-    If *prefix* is not specified, then the bucket's root is used. If *max_count* is a positive integer,
-    the number of items returned may be less, but not more, than its value, otherwise it is ignored, and
-    all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
-    the listing must start, thus allowing for paginating the items retrieval operation.
+    The items to be removed are listed in *identifiers*, either with a simple *name*, or with
+    a *name,version* pair. If the version is not provided for a given item, then only its
+    current (latest) version is removed. Items in *identifiers* are ignored, if not found.
+    If *identifiers* is not provided, then all items prefixed with *prefix* are removed.
 
-    The information returned by the native invocation is shown below, lexicographically sorted by *object_name*.
-        - *object_name*: the name of the item
-        - *last_modified*: the date and time the item was last modified
-        - *size*: the size of the item in bytes
-        - *etag*: a hash of the item
-        - *is_dir*: a *bool* indicating if the item is a directory
-        - *version_id*: the version of the item, if bucket versioning is enabled
+    The removal operation will attempt to continue if errors occur. Thus, make sure to check *errors*,
+    besides inspecting the returned value.
 
-    :param prefix: path prefixing the items to be listed
-    :param max_count: the maximum number of items to return
-    :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
+    :param identifiers: identifiers for the items to be removed (defaults to all items in *prefix*)
+    :param prefix: optional path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional MinIO client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
-    :return: the iterator into the list of items, or *None* if path not found or error
+    :return: The number of items successfully removed
     """
     # initialize the return variable
-    result: list[dict[str, Any]] | None = None
+    result: int = 0
 
-    # make sure to have a client
-    client = client or get_client(errors=errors)
-    if client:
-        # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
-                                      param=S3Param.BUCKET_NAME)
-        # must terminate with '/', otherwise only the folder is considered
-        path: str = Path(prefix).as_posix() + "/" if prefix else None
-        try:
-            items: list[dict[str, Any]] = []
-            proceed: bool = True
-            while proceed:
-                # obtain an iterator on the items in the folder
-                iterator: Iterator[MinioObject] = client.list_objects(bucket_name=bucket,
-                                                                      prefix=path,
-                                                                      include_user_meta=True,
-                                                                      recursive=True,
-                                                                      start_after=start_after)
-                # traverse the iterator (it might be empty)
-                proceed = False
-                for obj in iterator:
-                    items.append(vars(obj))
-                    if max_count and len(items) == max_count:
-                        break
-                    start_after = obj.object_name
-                    proceed = True
+    if identifiers:
+        # make sure to have a client
+        client = client or get_client(errors=errors)
+        if client:
+            # make sure to have a bucket
+            bucket = bucket or _get_param(engine=S3Engine.AWS,
+                                          param=S3Param.BUCKET_NAME)
+            # establish a path prefix
+            path: Path = Path(prefix) if isinstance(prefix, str) else prefix
 
-            # save the items and log the results
-            result = items
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Listed {len(result)} "
-                                                      f"items in '{prefix}', bucket '{bucket}'")
-        except Exception as e:
-            msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
-            if isinstance(errors, list):
-                errors.append(msg)
+            # a maximum of 1000 items is used for convenience
+            pos: int = 0
+            size: int = min(1000, len(identifiers))
+            while size > 0:
+                deletes: list[DeleteObject] = []
+                for identifier in identifiers[pos:pos+size]:
+                    if isinstance(identifier, tuple):
+                        deletes.append(DeleteObject(name=(path / identifier[0]).as_posix() if path else identifier[0],
+                                                    version_id=identifier[1]))
+                    else:
+                        # noinspection PyTypeChecker
+                        deletes.append(DeleteObject(name=(path / identifier).as_posix() if path else identifier))
+                try:
+                    reply: Iterator[DeleteError] = client.remove_objects(bucket_name=bucket,
+                                                                         delete_object_list=deletes)
+                    # acknowledge errors eventually reported
+                    if isinstance(errors, list):
+                        errors.extend([f"Error {e.code} ({e.message}) "
+                                       f"removing document ({e.name}, v. {e.version_id}"
+                                       for e in (reply or [])])
+                except Exception as e:
+                    msg: str = _except_msg(exception=e,
+                                           engine=S3Engine.MINIO)
+                    if _S3_LOGGERS[S3Engine.MINIO]:
+                        _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                    if isinstance(errors, list):
+                        errors.append(msg)
+                pos += size
+                size = min(1000, len(identifiers) - pos)
+    elif prefix:
+        result = prefix_remove(prefix=prefix,
+                               bucket=bucket,
+                               client=client,
+                               errors=errors)
+    elif isinstance(errors, list):
+        errors.append("Either 'identifiers' or 'prefix' must be provided")
 
     return result
 
@@ -721,10 +749,11 @@ def prefix_remove(prefix: str | Path | None,
         # make sure to have a bucket
         bucket = bucket or _get_param(engine=S3Engine.AWS,
                                       param=S3Param.BUCKET_NAME)
-        items: list[dict[str, Any]] = prefix_list(bucket=bucket,
-                                                  prefix=prefix,
-                                                  client=client,
-                                                  errors=errors)
+        items: list[dict[str, Any]] = items_get_info(attributes=["Key"],
+                                                     bucket=bucket,
+                                                     prefix=prefix,
+                                                     client=client,
+                                                     errors=errors)
         if items is not None:
             # a maximum of 1000 items is used for convenience
             identifiers = [i.get("Key") for i in (items or [])]
@@ -757,6 +786,61 @@ def prefix_remove(prefix: str | Path | None,
                 pos += size
                 size = min(1000, len(identifiers) - pos)
 
+    return result
+
+
+def generate_presigned_url(identifier: str,
+                           expires_in: int,
+                           prefix: str | Path = None,
+                           bucket: str = None,
+                           client: Minio = None,
+                           errors: list[str] = None) -> str:
+    """
+    Generate a presigned URL that grants time-limited, no credentials required, access to a private MinIo object.
+
+    :param identifier: the data identifier
+    :param expires_in: time until expiration (in seconds, defaults to 3600)
+    :param prefix: optional path prefixing the item to be retrieved
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param client: optional S3 client (obtains a new one, if not provided)
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: the URL generated, or *None* if error or data not found
+    """
+    # initialize the return variable
+    result: str | None = None
+
+    # make sure to have a client
+    client = client or get_client(errors=errors)
+    if client:
+        # make sure to have a bucket
+        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+                                      param=S3Param.BUCKET_NAME)
+        # generate the URL
+        try:
+            if prefix:
+                obj_path: Path = Path(prefix) / identifier
+                obj_name: str = obj_path.as_posix()
+            else:
+                obj_name: str = identifier
+
+            if not isinstance(expires_in, int) or expires_in < 0:
+                expires_in = 3600
+            expires: timedelta = timedelta(seconds=expires_in)
+            result = client.presigned_get_object(bucket_name=bucket,
+                                                 object_name=obj_name,
+                                                 expires=expires)
+            if _S3_LOGGERS[S3Engine.AWS]:
+                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Generated presigned URL for '{obj_name}', bucket '{bucket}'")
+        except Exception as e:
+            # noinspection PyUnresolvedReferences
+            if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
+               (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
+                msg: str = _except_msg(exception=e,
+                                       engine=S3Engine.AWS)
+                if _S3_LOGGERS[S3Engine.AWS]:
+                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                if isinstance(errors, list):
+                    errors.append(msg)
     return result
 
 

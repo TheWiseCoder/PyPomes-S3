@@ -10,7 +10,7 @@ from .s3_pomes import (
     s3_object_store, s3_object_retrieve,
     s3_item_exists, s3_item_get_info,
     s3_item_get_tags, s3_item_remove, s3_items_remove,
-    s3_prefix_count, s3_prefix_list, s3_prefix_remove
+    s3_items_count, s3_items_get_info, s3_generate_presigned_url
 )
 
 __all__ = [
@@ -25,7 +25,7 @@ __all__ = [
     "s3_object_store", "s3_object_retrieve",
     "s3_item_exists", "s3_item_get_info",
     "s3_item_get_tags", "s3_item_remove", "s3_items_remove",
-    "s3_prefix_count", "s3_prefix_list", "s3_prefix_remove"
+    "s3_items_count", "s3_items_get_info", "s3_generate_presigned_url"
 ]
 
 from importlib.metadata import version

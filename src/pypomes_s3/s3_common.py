@@ -14,6 +14,7 @@ class S3Engine(StrEnum):
     Supported S3 engines.
     """
     AWS = auto()
+    GCS = auto()
     MINIO = auto()
 
 
@@ -21,34 +22,43 @@ class S3Param(StrEnum):
     """
     Parameters for connecting to S3 engines.
     """
+    # all engines
     ENGINE = "engine"
-    ENDPOINT_URL = "endpoint-url"
     BUCKET_NAME = "bucket-name"
+    VERSION = "version"
+
+    # AWS and MinIO
+    ENDPOINT_URL = "endpoint-url"
     ACCESS_KEY = "access-key"
     SECRET_KEY = "secret-key"
     SECURE_ACCESS = "secure-access"
     REGION_NAME = "region-name"
-    VERSION = "version"
+
+    # GCS
+    CREDENTIALS = "credentials"
+    PROJECT_ID = "project-id"
 
 
 def __get_access_data() -> dict[S3Engine, dict[S3Param, Any]]:
     """
     Establish the access data for select S3 engines, from environment variables.
 
-    Tthe preferred way to specify S3 storage parameters is dynamically with 's3_setup_params'
-    specifying S3 storage parameters with environment variables can be done in two ways:
+    Sepcifying S3 storage parameters dynamically with 'gcs_setup()' is the required way for GCS engines if
+    authentication is done through credential key/value pairs, whereas specifying S3 storage parameters
+    dynamically with 's3_setup()' is the preferred way for AWS and MinIO engines. Specifying S3 storage
+    parameters with environment variables can be done in two ways:
       - 1. for a single S3 engine, specify the set
-           - *<APP_PREFIX>_S3_ENGINE* (one of 'aws', 'minio')
-           - *<APP_PREFIX>_S3_ENDPOINT_URL*
-           - *<APP_PREFIX>_S3_ACCESS_KEY*
-           - *<APP_PREFIX>_S3_SECRET_KEY*
-           - *<APP_PREFIX>_S3_SECURE_ACCESS*
-           - *<APP_PREFIX>_S3_REGION_NAME*
+           - *<APP_PREFIX>_S3_ENGINE* (one of 'aws', 'minio', 'gcs')
+           - *<APP_PREFIX>_S3_BUCKET_NAME*
+           - *<APP_PREFIX>_S3_PROJECT_ID* (GCS)
+           - *<APP_PREFIX>_S3_ENDPOINT_URL* (AWS, MinIO)
+           - *<APP_PREFIX>_S3_ACCESS_KEY* (AWS, MinIO)
+           - *<APP_PREFIX>_S3_SECRET_KEY* (AWS, MinIO)
+           - *<APP_PREFIX>_S3_SECURE_ACCESS* (AWS, MinIO)
+           - *<APP_PREFIX>_S3_REGION_NAME* (AWS, MinIO)
       - 2. for multiple S3 engines, specify a comma-separated list of engines in
            *<APP_PREFIX>_S3_ENGINES, and, for each engine, specify the set above, respectively replacing
-           *_S3_* with *_AWS_* and *_MINIO_*, for the engines listed
-
-    All required parameters mus be provided for the selected database engines, as there are no defaults.
+           *_S3_* with *_AWS_*, *_MINIO_*, and *_GCS_*, for the engines listed
 
     :return: the access data for the selected S3 engines
     """
@@ -75,14 +85,20 @@ def __get_access_data() -> dict[S3Engine, dict[S3Param, Any]]:
         else:
             prefix: str = engine.name
         result[engine] = {
-            S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{prefix}_ENDPOINT_URL"),
             S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_BUCKET_NAME"),
-            S3Param.ACCESS_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_ACCESS_KEY"),
-            S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_SECRET_KEY"),
-            S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{prefix}_SECURE_ACCESS"),
-            S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_REGION_NAME"),
             S3Param.VERSION: ""
         }
+        if engine == S3Engine.AWS or engine == S3Engine.MINIO:
+            result[engine].update({
+                S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{prefix}_ENDPOINT_URL"),
+                S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_BUCKET_NAME"),
+                S3Param.ACCESS_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_ACCESS_KEY"),
+                S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_SECRET_KEY"),
+                S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{prefix}_SECURE_ACCESS"),
+                S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_REGION_NAME")
+            })
+        elif engine == S3Engine.GCS:
+            result[engine][S3Param.PROJECT_ID] = env_get_str(key=f"{APP_PREFIX}_{prefix}_PROJECT_ID")
 
     return result
 
@@ -93,7 +109,8 @@ _S3_ACCESS_DATA: Final[dict[S3Engine, dict[S3Param, Any]]] = __get_access_data()
 # S3 loggers
 _S3_LOGGERS: Final[dict[S3Engine, Logger | None]] = {
     S3Engine.AWS: None,
-    S3Engine.MINIO: None
+    S3Engine.MINIO: None,
+    S3Engine.GCS: None
 }
 
 
