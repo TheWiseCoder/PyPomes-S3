@@ -11,11 +11,12 @@ from .s3_common import (
 
 
 def s3_setup(*,
-             engine: S3Engine,
+             engine: S3Engine | str,
              endpoint_url: str,
              bucket_name: str,
              access_key: str,
              secret_key: str,
+             s3_type: S3Engine = None,
              region_name: str = None,
              secure_access: bool = None) -> bool:
     """
@@ -24,11 +25,12 @@ def s3_setup(*,
     The meaning of some parameters may vary between different S3 engines.
     All parameters, with the exception of *region_name* and *secure_access*, are required.
 
-    :param engine: the S3 engine (one of [*aws*, *minio*])
+    :param engine: the S3 engine identification
     :param endpoint_url: the access URL for the service
     :param bucket_name: the name of the default bucket
     :param access_key: the access key for the service
     :param secret_key: the access secret code
+    :param s3_type: the S3 engine type (one of [*aws*, *minio*, *gcs*])
     :param region_name: the name of the region where the engine is located
     :param secure_access: whether to use Transport Security Layer
     :return: *True* if the data were accepted, *False* otherwise
@@ -36,18 +38,24 @@ def s3_setup(*,
     # initialize the return variable
     result: bool = False
 
+    if isinstance(engine, S3Engine):
+        if not s3_type:
+            s3_type = engine
+        engine = engine.value
+
     # process te parameters
     if engine in S3Engine and \
        endpoint_url and bucket_name and \
        access_key and secret_key:
         _S3_ACCESS_DATA[engine] = {
-            S3Param.ENGINE: engine.value,
+            S3Param.ENGINE: engine,
             S3Param.ENDPOINT_URL: endpoint_url,
             S3Param.BUCKET_NAME: bucket_name,
             S3Param.ACCESS_KEY: access_key,
             S3Param.SECRET_KEY: secret_key,
             S3Param.SECURE_ACCESS: secure_access,
             S3Param.REGION_NAME: region_name,
+            S3Param.TYPE: s3_type,
             S3Param.VERSION: ""
         }
         result = True
@@ -55,7 +63,7 @@ def s3_setup(*,
     return result
 
 
-def s3_set_logger(engine: S3Engine = None,
+def s3_set_logger(engine: S3Engine | str = None,
                   logger: Logger = None) -> bool:
     """
     Establish the logger for logging operations involving *engine*.
@@ -70,30 +78,31 @@ def s3_set_logger(engine: S3Engine = None,
     # initialize the return variable
     result: bool = False
 
-    # assert the database engine
-    engine = _assert_engine(engine=engine)
-    if engine:
-        _S3_LOGGERS[engine] = logger
+    # assert the S3 engine
+    engine_id, _engine_type = _assert_engine(engine=engine,
+                                             errors=engine)
+    if engine_id:
+        _S3_LOGGERS[engine_id] = logger
         result = True
 
     return result
 
 
-def s3_get_engines() -> list[S3Engine]:
+def s3_get_engines() -> list[str]:
     """
     Retrieve the *list* of configured engines.
 
     This *list* may include any of the supported engines: *aws*, *minio*.
     Note that the values in the returned *list* are instances of *S3Engine*, not strings.
 
-    :return: the *list* of configured engines
+    :return: the *list* of configured S3 engines
     """
     # SANITY-CHECK: return a cloned 'list'
     return list(_S3_ACCESS_DATA)
 
 
 def s3_get_param(key: S3Param,
-                 engine: S3Engine = None) -> str | None:
+                 engine: S3Engine | str = None) -> str | None:
     """
     Return the connection parameter value for *key*.
 
@@ -104,15 +113,20 @@ def s3_get_param(key: S3Param,
     :param engine: the reference S3 engine (the default engine, if not provided)
     :return: the current value of the connection parameter, or *None* if not found
     """
+    # initialize the return variable
+    result: Any = None
+
     # assert the S3 engine
-    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
-
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
     # retrieve the connection parameter
-    return _get_param(engine=engine,
-                      param=key)
+    if engine_id in _S3_ACCESS_DATA:
+        result = _get_param(engine_id=engine_id,
+                            param=key)
+    return result
 
 
-def s3_get_params(engine: S3Engine = None) -> dict[S3Param, Any] | None:
+def s3_get_params(engine: S3Engine | str = None) -> dict[S3Param, Any] | None:
     """
     Return the current access parameters as a *dict*.
 
@@ -121,14 +135,20 @@ def s3_get_params(engine: S3Engine = None) -> dict[S3Param, Any] | None:
     The meaning of these parameters may vary between different S3 engines.
     Note that the keys in the returned *dict* are strings, not *S3Param* instances.
 
-    :param engine: the database engine
+    :param engine: the database engine (the default engine, if not provided)
     :return: the current connection parameters for the engine, or *None* if not found
     """
-    # assert the S3 engine
-    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
+    # initialize the return variable
+    result: dict[S3Param, Any] | None = None
 
-    # return the connection parameters
-    return _S3_ACCESS_DATA[engine].copy() if engine in _S3_ACCESS_DATA else None
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    # retrieve the connection parameters
+    if engine_id:
+        result = _S3_ACCESS_DATA[engine_id].copy()
+
+    return result
 
 
 def s3_startup(engine: S3Engine = None,
@@ -152,39 +172,43 @@ def s3_startup(engine: S3Engine = None,
     if not isinstance(errors, list):
         errors = []
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if not errors:
-        # determine if 'curr_engine' has been prepared for operations
-        version: str = _S3_ACCESS_DATA[curr_engine].get(S3Param.VERSION)
-        if version:
-            result = True
-        else:
-            # make sure to have a bucket
-            bucket = bucket or _get_param(engine=curr_engine,
-                                          param=S3Param.BUCKET_NAME)
-            if curr_engine == S3Engine.AWS:
-                from . import aws_pomes
-                result = aws_pomes.startup(bucket=bucket,
-                                           errors=errors)
-            elif curr_engine == S3Engine.MINIO:
-                from . import minio_pomes
-                result = minio_pomes.startup(bucket=bucket,
-                                             errors=errors)
-            elif curr_engine == S3Engine.GCS:
-                from . import gcs_pomes
-                gcs_pomes.gcs_setup(errors=errors)
-                if not errors:
-                    result = gcs_pomes.startup(bucket=bucket,
-                                               errors=errors)
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+
+    # determine if 'curr_engine' has been prepared for operations
+    version: str = _S3_ACCESS_DATA[engine_id].get(S3Param.VERSION)
+    if version:
+        result = True
+    else:
+        # make sure to have a bucket
+        bucket = bucket or _get_param(engine_id=engine_id,
+                                      param=S3Param.BUCKET_NAME)
+        if engine_type == S3Engine.AWS:
+            from . import aws_pomes
+            result = aws_pomes.startup(engine_id=engine_id,
+                                       bucket=bucket,
+                                       errors=errors)
+        elif engine_type == S3Engine.MINIO:
+            from . import minio_pomes
+            result = minio_pomes.startup(engine_id=engine_id,
+                                         bucket=bucket,
+                                         errors=errors)
+        elif engine_type == S3Engine.GCS:
+            from . import gcs_pomes
+            gcs_pomes.gcs_setup(engine_id=engine_id,
+                                errors=errors)
             if not errors:
-                _S3_ACCESS_DATA[curr_engine][S3Param.VERSION] = __get_version(engine=curr_engine)
+                result = gcs_pomes.startup(engine_id=engine_id,
+                                           bucket=bucket,
+                                           errors=errors)
+        if not errors:
+            _S3_ACCESS_DATA[engine_id][S3Param.VERSION] = __get_version(engine=engine)
 
     return result
 
 
-def s3_get_client(engine: S3Engine = None,
+def s3_get_client(engine: S3Engine | str = None,
                   errors: list[str] = None) -> Any:
     """
     Obtain and return a client to *engine*, or *None* if the client cannot be obtained.
@@ -198,18 +222,22 @@ def s3_get_client(engine: S3Engine = None,
     # initialize the return variable
     result: Any = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.get_client(errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+        result = aws_pomes.get_client(engine_id=engine_id,
+                                      errors=errors)
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.get_client(errors=errors)
-    elif curr_engine == S3Engine.GCS:
+        result = minio_pomes.get_client(engine_id=engine_id,
+                                        errors=errors)
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.get_client(errors=errors)
+        result = gcs_pomes.get_client(engine_id=engine_id,
+                                      errors=errors)
+
     return result
 
 
@@ -217,7 +245,7 @@ def s3_data_retrieve(identifier: str,
                      prefix: str | Path = None,
                      data_range: tuple[int, int] = None,
                      bucket: str = None,
-                     engine: S3Engine = None,
+                     engine: S3Engine | str = None,
                      client: Any = None,
                      errors: list[str] = None) -> bytes | None:
     """
@@ -235,28 +263,31 @@ def s3_data_retrieve(identifier: str,
     # initialize the return variable
     result: bytes | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.data_retrieve(identifier=identifier,
+        result = aws_pomes.data_retrieve(engine_id=engine_id,
+                                         identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          data_range=data_range,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.data_retrieve(identifier=identifier,
+        result = minio_pomes.data_retrieve(engine_id=engine_id,
+                                           identifier=identifier,
                                            prefix=prefix,
                                            bucket=bucket,
                                            data_range=data_range,
                                            client=client,
                                            errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.data_retrieve(identifier=identifier,
+        result = gcs_pomes.data_retrieve(engine_id=engine_id,
+                                         identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          data_range=data_range,
@@ -272,7 +303,7 @@ def s3_data_store(identifier: str,
                   mimetype: Mimetype | str = Mimetype.BINARY,
                   tags: dict = None,
                   bucket: str = None,
-                  engine: S3Engine = None,
+                  engine: S3Engine | str = None,
                   client: Any = None,
                   errors: list[str] = None) -> dict[str, str] | None:
     """
@@ -304,12 +335,13 @@ def s3_data_store(identifier: str,
     # initialize the return variable
     result: dict[str, str] | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.data_store(identifier=identifier,
+        result = aws_pomes.data_store(engine_id=engine_id,
+                                      identifier=identifier,
                                       data=data,
                                       bucket=bucket,
                                       prefix=prefix,
@@ -318,9 +350,10 @@ def s3_data_store(identifier: str,
                                       tags=tags,
                                       client=client,
                                       errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.data_store(identifier=identifier,
+        result = minio_pomes.data_store(engine_id=engine_id,
+                                        identifier=identifier,
                                         data=data,
                                         bucket=bucket,
                                         prefix=prefix,
@@ -329,9 +362,10 @@ def s3_data_store(identifier: str,
                                         tags=tags,
                                         client=client,
                                         errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        gcs_pomes.data_store(identifier=identifier,
+        gcs_pomes.data_store(engine_id=engine_id,
+                             identifier=identifier,
                              data=data,
                              bucket=bucket,
                              prefix=prefix,
@@ -365,28 +399,31 @@ def s3_file_retrieve(identifier: str,
     # initialize the return variable
     result: bool | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.file_retrieve(identifier=identifier,
+        result = aws_pomes.file_retrieve(engine_id=engine_id,
+                                         identifier=identifier,
                                          filepath=filepath,
                                          bucket=bucket,
                                          prefix=prefix,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.file_retrieve(identifier=identifier,
+        result = minio_pomes.file_retrieve(engine_id=engine_id,
+                                           identifier=identifier,
                                            filepath=filepath,
                                            bucket=bucket,
                                            prefix=prefix,
                                            client=client,
                                            errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.file_retrieve(identifier=identifier,
+        result = gcs_pomes.file_retrieve(engine_id=engine_id,
+                                         identifier=identifier,
                                          filepath=filepath,
                                          bucket=bucket,
                                          prefix=prefix,
@@ -421,12 +458,13 @@ def s3_file_store(identifier: str,
     # initialize the return variable
     result: bool = False
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.file_store(identifier=identifier,
+        result = aws_pomes.file_store(engine_id=engine_id,
+                                      identifier=identifier,
                                       filepath=filepath,
                                       mimetype=mimetype,
                                       bucket=bucket,
@@ -434,9 +472,10 @@ def s3_file_store(identifier: str,
                                       tags=tags,
                                       client=client,
                                       errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.file_store(identifier=identifier,
+        result = minio_pomes.file_store(engine_id=engine_id,
+                                        identifier=identifier,
                                         filepath=filepath,
                                         mimetype=mimetype,
                                         bucket=bucket,
@@ -444,9 +483,10 @@ def s3_file_store(identifier: str,
                                         tags=tags,
                                         client=client,
                                         errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.file_store(identifier=identifier,
+        result = gcs_pomes.file_store(engine_id=engine_id,
+                                      identifier=identifier,
                                       filepath=filepath,
                                       mimetype=mimetype,
                                       bucket=bucket,
@@ -491,7 +531,7 @@ def s3_object_retrieve(identifier: str,
         except Exception as e:
             if isinstance(errors, list):
                 errors.append(_except_msg(exception=e,
-                                          engine=engine))
+                                          engine_id=engine))
     return result
 
 
@@ -531,7 +571,7 @@ def s3_object_store(identifier: str,
     except Exception as e:
         if isinstance(errors, list):
             errors.append(_except_msg(exception=e,
-                                      engine=engine))
+                                      engine_id=engine))
     if data:
         # store the serialized object
         result = s3_data_store(identifier=identifier,
@@ -610,28 +650,31 @@ def s3_item_get_info(identifier: str,
     # initialize the return variable
     result: Any | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_get_info(identifier=identifier,
+        result = aws_pomes.item_get_info(engine_id=engine_id,
+                                         identifier=identifier,
                                          attributes=attributes,
                                          prefix=prefix,
                                          bucket=bucket,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_get_info(identifier=identifier,
+        result = minio_pomes.item_get_info(engine_id=engine_id,
+                                           identifier=identifier,
                                            attributes=attributes,
                                            prefix=prefix,
                                            bucket=bucket,
                                            client=client,
                                            errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.item_get_info(identifier=identifier,
+        result = gcs_pomes.item_get_info(engine_id=engine_id,
+                                         identifier=identifier,
                                          attributes=attributes,
                                          prefix=prefix,
                                          bucket=bucket,
@@ -663,26 +706,29 @@ def s3_item_get_tags(identifier: str,
     # initialize the return variable
     result: dict[str, Any] | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_get_tags(identifier=identifier,
+        result = aws_pomes.item_get_tags(engine_id=engine_id,
+                                         identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_get_tags(identifier=identifier,
+        result = minio_pomes.item_get_tags(engine_id=engine_id,
+                                           identifier=identifier,
                                            prefix=prefix,
                                            bucket=bucket,
                                            client=client,
                                            errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.item_get_tags(identifier=identifier,
+        result = gcs_pomes.item_get_tags(engine_id=engine_id,
+                                         identifier=identifier,
                                          prefix=prefix,
                                          bucket=bucket,
                                          client=client,
@@ -714,28 +760,31 @@ def s3_item_remove(identifier: str,
     # initialize the return variable
     result: bool | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.item_remove(identifier=identifier,
+        result = aws_pomes.item_remove(engine_id=engine_id,
+                                       identifier=identifier,
                                        prefix=prefix,
                                        version=version,
                                        bucket=bucket,
                                        client=client,
                                        errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.item_remove(identifier=identifier,
+        result = minio_pomes.item_remove(engine_id=engine_id,
+                                         identifier=identifier,
                                          prefix=prefix,
                                          version=version,
                                          bucket=bucket,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.item_remove(identifier=identifier,
+        result = gcs_pomes.item_remove(engine_id=engine_id,
+                                       identifier=identifier,
                                        prefix=prefix,
                                        version=version,
                                        bucket=bucket,
@@ -744,7 +793,7 @@ def s3_item_remove(identifier: str,
     return result
 
 
-def s3_items_get_info(attributes: list[str],
+def s3_items_get_info(attrs: list[str],
                       prefix: str | Path,
                       max_count: int = None,
                       start_after: str = None,
@@ -761,11 +810,11 @@ def s3_items_get_info(attributes: list[str],
     the listing must start, thus allowing for paginating the items retrieval operation.
 
     The information returned depends on the *engine* in question, and can be viewed at the native
-    invocation's *docstring*. The parameter *attributes* must contain one or more of the attributes relevant
+    invocation's *docstring*. The parameter *attrs* must contain one or more of the attributes relevant
     to the *engine*. For the *GCS* engine, attributes named *metadata.<custom_metadata_i* are the
     custom metadata associated with the data.
 
-    :param attributes: the items' attributes to be returned
+    :param attrs: the items' attributes to be returned
     :param prefix: path prefixing the items to be listed
     :param max_count: the maximum number of items to return (defaults to all items)
     :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
@@ -778,30 +827,33 @@ def s3_items_get_info(attributes: list[str],
     # initialize the return variable
     result: list[dict[str, Any]] | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.items_get_info(attributes=attributes,
+        result = aws_pomes.items_get_info(engine_id=engine_id,
+                                          attrs=attrs,
                                           prefix=prefix,
                                           max_count=max_count,
                                           start_after=start_after,
                                           bucket=bucket,
                                           client=client,
                                           errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.items_get_info(attributes=attributes,
+        result = minio_pomes.items_get_info(engine_id=engine_id,
+                                            attrs=attrs,
                                             prefix=prefix,
                                             max_count=max_count,
                                             start_after=start_after,
                                             bucket=bucket,
                                             client=client,
                                             errors=errors)
-    if curr_engine == S3Engine.GCS:
+    if engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.items_get_info(attributes=attributes,
+        result = gcs_pomes.items_get_info(engine_id=engine_id,
+                                          attrs=attrs,
                                           prefix=prefix,
                                           max_count=max_count,
                                           start_after=start_after,
@@ -832,24 +884,27 @@ def s3_items_count(prefix: str | Path | None,
     # initialize the return variable
     result: int | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.items_count(bucket=bucket,
+        result = aws_pomes.items_count(engine_id=engine_id,
+                                       bucket=bucket,
                                        prefix=prefix,
                                        client=client,
                                        errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.items_count(bucket=bucket,
+        result = minio_pomes.items_count(engine_id=engine_id,
+                                         bucket=bucket,
                                          prefix=prefix,
                                          client=client,
                                          errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.items_count(bucket=bucket,
+        result = gcs_pomes.items_count(engine_id=engine_id,
+                                       bucket=bucket,
                                        prefix=prefix,
                                        client=client,
                                        errors=errors)
@@ -884,26 +939,29 @@ def s3_items_remove(identifiers: list[str | tuple[str, str]] = None,
     # initialize the return variable
     result: int = 0
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.items_remove(identifiers=identifiers,
+        result = aws_pomes.items_remove(engine_id=engine_id,
+                                        identifiers=identifiers,
                                         bucket=bucket,
                                         prefix=prefix,
                                         client=client,
                                         errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.items_remove(identifiers=identifiers,
+        result = minio_pomes.items_remove(engine_id=engine_id,
+                                          identifiers=identifiers,
                                           bucket=bucket,
                                           prefix=prefix,
                                           client=client,
                                           errors=errors)
-    elif curr_engine == S3Engine.GCS:
+    elif engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.items_remove(identifiers=identifiers,
+        result = gcs_pomes.items_remove(engine_id=engine_id,
+                                        identifiers=identifiers,
                                         bucket=bucket,
                                         prefix=prefix,
                                         client=client,
@@ -933,28 +991,31 @@ def s3_generate_presigned_url(identifier: str,
     # initialize the return variable
     result: str | None = None
 
-    # determine the S3 engine
-    curr_engine: S3Engine = _assert_engine(engine=engine,
-                                           errors=errors)
-    if curr_engine == S3Engine.AWS:
+    # assert the S3 engine
+    engine_id, engine_type = _assert_engine(engine=engine,
+                                            errors=engine)
+    if engine_type == S3Engine.AWS:
         from . import aws_pomes
-        result = aws_pomes.generate_presigned_url(identifier=identifier,
+        result = aws_pomes.generate_presigned_url(engine_id=engine_id,
+                                                  identifier=identifier,
                                                   prefix=prefix,
                                                   expires_in=expires_in,
                                                   bucket=bucket,
                                                   client=client,
                                                   errors=errors)
-    elif curr_engine == S3Engine.MINIO:
+    elif engine_type == S3Engine.MINIO:
         from . import minio_pomes
-        result = minio_pomes.generate_presigned_url(identifier=identifier,
+        result = minio_pomes.generate_presigned_url(engine_id=engine_id,
+                                                    identifier=identifier,
                                                     prefix=prefix,
                                                     expires_in=expires_in,
                                                     bucket=bucket,
                                                     client=client,
                                                     errors=errors)
-    if curr_engine == S3Engine.GCS:
+    if engine_type == S3Engine.GCS:
         from . import gcs_pomes
-        result = gcs_pomes.generate_presigned_url(identifier=identifier,
+        result = gcs_pomes.generate_presigned_url(engine_id=engine_id,
+                                                  identifier=identifier,
                                                   prefix=prefix,
                                                   expires_in=expires_in,
                                                   bucket=bucket,
@@ -963,7 +1024,7 @@ def s3_generate_presigned_url(identifier: str,
     return result
 
 
-def __get_version(engine: S3Engine = None) -> str | None:
+def __get_version(engine: S3Engine | str = None) -> str | None:
     """
     Obtain and return the current version of *engine*.
 
@@ -974,9 +1035,8 @@ def __get_version(engine: S3Engine = None) -> str | None:
     result: str | None = None
 
     # assert the S3 engine
-    engine = next(iter(_S3_ACCESS_DATA)) if not engine and _S3_ACCESS_DATA else engine
-
-    match engine:
+    _engine_id, engine_type = _assert_engine(engine=engine)
+    match engine_type:
         case S3Engine.MINIO:
             import minio
             result = minio.__version__

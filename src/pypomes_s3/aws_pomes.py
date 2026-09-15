@@ -7,15 +7,17 @@ from pypomes_core import Mimetype
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    _S3_LOGGERS, S3Engine, S3Param,
+    _S3_LOGGERS, S3Param,
     _get_param, _get_params, _normalize_tags, _except_msg
 )
 
 
-def get_client(errors: list[str] = None) -> BaseClient | None:
+def get_client(engine_id: str,
+               errors: list[str] = None) -> BaseClient | None:
     """
     Obtain and return a *AWS* client object.
 
+    :param engine_id: the reference AWS engine
     :param errors: incidental error messages (might be a non-empty list)
     :return: the AWS client object, or *None* if error
     """
@@ -23,7 +25,7 @@ def get_client(errors: list[str] = None) -> BaseClient | None:
     result: BaseClient | None = None
 
     # retrieve the access parameters
-    aws_params: dict[S3Param, Any] = _get_params(engine=S3Engine.AWS)
+    aws_params: dict[S3Param, Any] = _get_params(engine_id=engine_id)
 
     # obtain the AWS client
     try:
@@ -34,20 +36,21 @@ def get_client(errors: list[str] = None) -> BaseClient | None:
                               endpoint_url=aws_params.get(S3Param.ENDPOINT_URL),
                               aws_access_key_id=aws_params.get(S3Param.ACCESS_KEY),
                               aws_secret_access_key=aws_params.get(S3Param.SECRET_KEY))
-        if _S3_LOGGERS[S3Engine.AWS]:
-            _S3_LOGGERS[S3Engine.AWS].debug(msg="AWS client created")
+        if _S3_LOGGERS[engine_id]:
+            _S3_LOGGERS[engine_id].debug(msg="AWS client created")
 
     except Exception as e:
         msg: str = _except_msg(exception=e,
-                               engine=S3Engine.AWS)
-        if _S3_LOGGERS[S3Engine.AWS]:
-            _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                               engine_id=engine_id)
+        if _S3_LOGGERS[engine_id]:
+            _S3_LOGGERS[engine_id].error(msg=msg)
         if isinstance(errors, list):
             errors.append(msg)
     return result
 
 
-def startup(bucket: str,
+def startup(engine_id: str,
+            bucket: str,
             errors: list[str] = None) -> bool:
     """
     Prepare the *AWS* client for operations.
@@ -55,6 +58,7 @@ def startup(bucket: str,
     This function should be called just once, at startup,
     to make sure the interaction with the S3 service is fully functional.
 
+    :param engine_id: the reference AWS engine
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
     :return: *True* if service is fully functional, *False* otherwise
@@ -63,34 +67,36 @@ def startup(bucket: str,
     result: bool = False
 
     # obtain a client
-    client: BaseClient = get_client(errors=errors)
+    client: BaseClient = get_client(engine_id=engine_id,
+                                    errors=errors)
     if client:
         try:
             client.head_bucket(Bucket=bucket)
             result = True
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Started AWS, bucket '{bucket}' asserted")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Started AWS, bucket '{bucket}' asserted")
         except Exception as e1:
             # log the exception and try to create a bucket
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].warning(msg=_except_msg(exception=e1,
-                                                                  engine=S3Engine.AWS))
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].warning(msg=_except_msg(exception=e1,
+                                                               engine_id=engine_id))
             try:
                 client.create_bucket(Bucket=bucket)
                 result = True
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Started AWS, bucket '{bucket}' created")
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].debug(msg=f"Started AWS, bucket '{bucket}' created")
             except Exception as e2:
                 msg = _except_msg(exception=e2,
-                                  engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                  engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def data_retrieve(identifier: str,
+def data_retrieve(engine_id: str,
+                  identifier: str,
                   bucket: str = None,
                   prefix: str | Path = None,
                   data_range: tuple[int, int] = None,
@@ -99,6 +105,7 @@ def data_retrieve(identifier: str,
     """
     Retrieve data from the *AWS* store.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the data identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path prefixing the item to be retrieved
@@ -111,10 +118,11 @@ def data_retrieve(identifier: str,
     result: bytes | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         # retrieve the data
         obj_range: str = f"bytes={data_range[0]}-{data_range[1]}" if data_range else None
@@ -128,22 +136,23 @@ def data_retrieve(identifier: str,
                                                       Key=obj_key,
                                                       Range=obj_range)
             result = reply["Body"]
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def data_store(identifier: str,
+def data_store(engine_id: str,
+               identifier: str,
                data: bytes | str | BinaryIO,
                length: int | None,
                prefix: str | Path = None,
@@ -166,6 +175,7 @@ def data_store(identifier: str,
     in the responses. In fact, the responses vary wildly with the different *AWS* implementations.
     It should also be noted that those responses are not guaranteed to be serializable.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the data identifier
     :param data: the data to store
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -181,10 +191,11 @@ def data_store(identifier: str,
     result: dict[str, str] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         bin_data: BinaryIO
         if isinstance(data, BinaryIO):
@@ -210,20 +221,21 @@ def data_store(identifier: str,
                                        ContentType=mimetype,
                                        Key=obj_key,
                                        Metadata=_normalize_tags(tags))
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=(f"Stored '{obj_key}', bucket '{bucket}', "
-                                                     f"content type '{mimetype}', tags '{tags}'"))
+            # if _S3_LOGGERS[engine_id]:
+            #     _S3_LOGGERS[engine_id].debug(msg=(f"Stored '{obj_key}', bucket '{bucket}', "
+            #                                       f"content type '{mimetype}', tags '{tags}'"))
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.AWS)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
     return result
 
 
-def file_retrieve(identifier: str,
+def file_retrieve(engine_id: str,
+                  identifier: str,
                   filepath: Path | str,
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -232,6 +244,7 @@ def file_retrieve(identifier: str,
     """
     Retrieve a file from the *AWS* store.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -244,10 +257,11 @@ def file_retrieve(identifier: str,
     result: bool | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -260,23 +274,24 @@ def file_retrieve(identifier: str,
                                  Filename=file_path,
                                  Key=obj_key)
             result = Path(filepath).exists()
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"{obj_key}', bucket '{bucket}', "
-                                                    f"{'retrieved' if result else 'not retrieved'}")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"{obj_key}', bucket '{bucket}', "
+                                                 f"{'retrieved' if result else 'not retrieved'}")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def file_store(identifier: str,
+def file_store(engine_id: str,
+               identifier: str,
                filepath: Path | str,
                mimetype: Mimetype | str,
                bucket: str = None,
@@ -287,6 +302,7 @@ def file_store(identifier: str,
     """
     Store a file at the *AWS* store.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the file identifier, tipically a file name
     :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
@@ -301,10 +317,11 @@ def file_store(identifier: str,
     result: bool = False
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
 
         extra_args: dict[str, Any] | None = None
@@ -329,22 +346,24 @@ def file_store(identifier: str,
                                Bucket=bucket,
                                Key=obj_key,
                                ExtraArgs=extra_args)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Stored '{obj_key}', "
-                                                    f"bucket '{bucket}', from '{file_path}', "
-                                                    f"content type '{mimetype}', tags '{tags}'")
+            # if _S3_LOGGERS[engine_id]:
+            #     _S3_LOGGERS[engine_id].debug(msg=f"Stored '{obj_key}', "
+            #                                         f"bucket '{bucket}', from '{file_path}', "
+            #                                         f"content type '{mimetype}', tags '{tags}'")
             result = True
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.AWS)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
+
     return result
 
 
-def item_get_info(identifier: str,
+def item_get_info(engine_id: str,
+                  identifier: str,
                   attributes: list[str],
                   prefix: str | Path = None,
                   bucket: str = None,
@@ -391,6 +410,7 @@ def item_get_info(identifier: str,
         'ObjectSize': 123
     }
 
+    :param engine_id: the reference AWS engine
     :param identifier: the item identifier
     :param attributes: the item's attributes to be returned
     :param prefix: optional path prefixing the item
@@ -403,10 +423,11 @@ def item_get_info(identifier: str,
     result: dict[str, Any] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -417,22 +438,23 @@ def item_get_info(identifier: str,
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key,
                                                   ObjectAttributes=attributes)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Got info for '{obj_key}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Got info for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def item_get_tags(identifier: str,
+def item_get_tags(engine_id: str,
+                  identifier: str,
                   prefix: str | Path = None,
                   bucket: str = None,
                   client: BaseClient = None,
@@ -484,6 +506,7 @@ def item_get_tags(identifier: str,
         'ObjectLockLegalHoldStatus': 'ON'|'OFF'
     }
 
+    :param engine_id: the reference AWS engine
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -495,10 +518,11 @@ def item_get_tags(identifier: str,
     result: dict[str, Any] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -509,23 +533,23 @@ def item_get_tags(identifier: str,
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
             result = head_info.get("Metadata")
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
-
     return result
 
 
-def item_remove(identifier: str,
+def item_remove(engine_id: str,
+                identifier: str,
                 prefix: str | Path = None,
                 version: str = None,
                 bucket: str = None,
@@ -536,6 +560,7 @@ def item_remove(identifier: str,
 
     If *version* is not specified, then only the item's current (latest) version is removed.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item to be removed
     :param version: optional version of the item to be removed (defaults to its current version)
@@ -548,10 +573,11 @@ def item_remove(identifier: str,
     result: bool | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         if prefix:
             path: Path = Path(prefix) / identifier
@@ -569,23 +595,24 @@ def item_remove(identifier: str,
             reply: dict[str, Any] = client.delete_object(Bucket=bucket,
                                                          Key=key,
                                                          VersionId=version)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Deleted '{key}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Deleted '{key}', bucket '{bucket}'")
             result = reply.get("DeleteMarker")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def items_get_info(attributes: list[str],
+def items_get_info(engine_id: str,
+                   attrs: list[str],
                    prefix: str | Path,
                    max_count: int = None,
                    start_after: str = None,
@@ -600,10 +627,9 @@ def items_get_info(attributes: list[str],
     all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
     the listing must start, thus allowing for paginating the items retrieval operation.
 
-    The information returned by the native invocation is shown below. The parameter *attributes* must contain
-    one or more of the first-level attributes listed. The *list* returned contains the items of the
-    *Contents* attribute, lexicographically sorted by its *Key* attribute. Refer to the published *AWS*
-    documentation for the meaning of these attributes.
+    The information returned by the native invocation, lexicographically sorted by *Key* in *Contents*,
+    is shown below. The parameter *attrs* must contain one or more of the first-level attributes within the
+    *Contents* attribute. Refer to the published *AWS* documentation for the meaning of these attributes.
     {
         'IsTruncated': True|False,
         'Contents': [
@@ -645,7 +671,8 @@ def items_get_info(attributes: list[str],
         'RequestCharged': 'requester'
     }
 
-    :param attributes: the items' attributes to be returned
+    :param engine_id: the reference AWS engine
+    :param attrs: the items' attributes to be returned
     :param prefix: path prefixing the items to be listed
     :param max_count: the maximum number of items to return (defaults to all items)
     :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
@@ -658,10 +685,11 @@ def items_get_info(attributes: list[str],
     result: list[dict[str, Any]] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         # must terminate with '/', otherwise only the folder is considered
         path: str = Path(prefix).as_posix() + "/" if prefix else None
@@ -704,23 +732,24 @@ def items_get_info(attributes: list[str],
             # save the items and log the results
             result = []
             for item in items:
-                result.append({k: v for k, v in item.items() if k in attributes})
-            if _S3_LOGGERS[S3Engine.AWS]:
+                result.append({k: v for k, v in item.items() if k in attrs})
+            if _S3_LOGGERS[engine_id]:
                 msg: str = f"Listed {len(result)} items in '{prefix}', bucket '{bucket}'"
                 if start_after:
                     msg += f", starting after {start_after}"
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=msg)
+                _S3_LOGGERS[engine_id].debug(msg=msg)
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.AWS)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
     return result
 
 
-def items_count(prefix: str | Path | None,
+def items_count(engine_id: str,
+                prefix: str | Path | None,
                 bucket: str = None,
                 client: BaseClient = None,
                 errors: list[str] = None) -> int | None:
@@ -731,6 +760,7 @@ def items_count(prefix: str | Path | None,
     of a *prefix* may be time-consuming, as the least inefficient way to obtain such information with the
     *boto3* package is by paginating the elements and accounting for the sizes of these pages.
 
+    :param engine_id: the reference AWS engine
     :param prefix: path prefixing the items to be counted
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional AWS client (obtains a new one, if not provided)
@@ -741,10 +771,11 @@ def items_count(prefix: str | Path | None,
     result: int | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             # initialize a page iterator
@@ -754,19 +785,21 @@ def items_count(prefix: str | Path | None,
                                                         Delimiter="/")
             # traverse the pages, counting the items
             result = sum(page.get("KeyCount", 0) for page in iterator)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.AWS)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
+
     return result
 
 
-def items_remove(identifiers: list[str | tuple[str, str]] = None,
+def items_remove(engine_id: str,
+                 identifiers: list[str | tuple[str, str]] = None,
                  prefix: str | Path = None,
                  bucket: str = None,
                  client: BaseClient = None,
@@ -782,6 +815,7 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
     The removal operation will attempt to continue if errors occur. Thus, make sure to check *errors*,
     besides inspecting the returned value.
 
+    :param engine_id: the reference AWS engine
     :param identifiers: optional identifiers for the items to be removed
     :param prefix: optional path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -794,10 +828,11 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
 
     if identifiers:
         # make sure to have a client
-        client = client or get_client(errors=errors)
+        client = client or get_client(engine_id=engine_id,
+                                      errors=errors)
         if client:
             # make sure to have a bucket
-            bucket = bucket or _get_param(engine=S3Engine.AWS,
+            bucket = bucket or _get_param(engine_id=engine_id,
                                           param=S3Param.BUCKET_NAME)
             # establish a path prefix
             path: Path = Path(prefix) if isinstance(prefix, str) else prefix
@@ -832,15 +867,16 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
                                        for e in reply.get("Errors", [])])
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
-                                           engine=S3Engine.AWS)
-                    if _S3_LOGGERS[S3Engine.AWS]:
-                        _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                           engine_id=engine_id)
+                    if _S3_LOGGERS[engine_id]:
+                        _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
                 pos += size
                 size = min(1000, len(identifiers) - pos)
     elif prefix:
-        result = prefix_remove(prefix=prefix,
+        result = prefix_remove(engine_id=engine_id,
+                               prefix=prefix,
                                bucket=bucket,
                                client=client,
                                errors=errors)
@@ -850,7 +886,8 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
     return result
 
 
-def prefix_remove(prefix: str | Path,
+def prefix_remove(engine_id: str,
+                  prefix: str | Path,
                   bucket: str = None,
                   client: BaseClient = None,
                   errors: list[str] = None) -> int:
@@ -862,6 +899,7 @@ def prefix_remove(prefix: str | Path,
     will attempt to continue if errors occur. Thus, make sure to check *errors*, besides inspecting
     the returned value.
 
+    :param engine_id: the reference AWS engine
     :param prefix: path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional AWS client (obtains a new one, if not provided)
@@ -872,12 +910,14 @@ def prefix_remove(prefix: str | Path,
     result: int = 0
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
-        items: list[dict[str, Any]] = items_get_info(attributes=["Key"],
+        items: list[dict[str, Any]] = items_get_info(engine_id=engine_id,
+                                                     attrs=["Key"],
                                                      bucket=bucket,
                                                      prefix=prefix,
                                                      client=client,
@@ -905,17 +945,19 @@ def prefix_remove(prefix: str | Path,
                                        for e in reply.get("Errors", [])])
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
-                                           engine=S3Engine.AWS)
-                    if _S3_LOGGERS[S3Engine.AWS]:
-                        _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                           engine_id=engine_id)
+                    if _S3_LOGGERS[engine_id]:
+                        _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
                 pos += size
                 size = min(1000, len(identifiers) - pos)
+
     return result
 
 
-def generate_presigned_url(identifier: str,
+def generate_presigned_url(engine_id: str,
+                           identifier: str,
                            expires_in: int,
                            prefix: str | Path = None,
                            bucket: str = None,
@@ -924,6 +966,7 @@ def generate_presigned_url(identifier: str,
     """
     Generate a presigned URL that grants time-limited, no credentials required, access to a private AWS object.
 
+    :param engine_id: the reference AWS engine
     :param identifier: the data identifier
     :param expires_in: time until expiration (in seconds, defaults to 3600)
     :param prefix: optional path prefixing the item to be retrieved
@@ -936,10 +979,11 @@ def generate_presigned_url(identifier: str,
     result: str | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         # generate the URL
         try:
@@ -952,16 +996,16 @@ def generate_presigned_url(identifier: str,
                                                    Params={"Bucket": bucket,
                                                            "Key": obj_key},
                                                    ExpiresIn=expires_in)
-            if _S3_LOGGERS[S3Engine.AWS]:
-                _S3_LOGGERS[S3Engine.AWS].debug(msg=f"Generated presigned URL for '{obj_key}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Generated presigned URL for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
-                if _S3_LOGGERS[S3Engine.AWS]:
-                    _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result

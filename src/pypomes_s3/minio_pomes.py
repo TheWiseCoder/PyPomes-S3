@@ -17,7 +17,8 @@ from .s3_common import (
 )
 
 
-def startup(bucket: str,
+def startup(engine_id: str,
+            bucket: str,
             errors: list[str] | None) -> bool:
     """
     Prepare the *MinIO* client for operations.
@@ -25,6 +26,7 @@ def startup(bucket: str,
     This function should be called just once, at startup,
     to make sure the interaction with the MinIo service is fully functional.
 
+    :param engine_id: the reference MinIO engine
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
     :return: *True* if service is fully functional, *False* otherwise
@@ -33,7 +35,8 @@ def startup(bucket: str,
     result: bool = False
 
     # obtain a client
-    client: Minio = get_client(errors=errors)
+    client: Minio = get_client(engine_id=engine_id,
+                               errors=errors)
     if client:
         # the client was obtained
         try:
@@ -43,22 +46,24 @@ def startup(bucket: str,
                 client.make_bucket(bucket_name=bucket)
                 action: str = "created"
             result = True
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Started MinIO, {action} bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Started MinIO, {action} bucket '{bucket}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
     return result
 
 
-def get_client(errors: list[str] | None) -> Minio | None:
+def get_client(engine_id: str,
+               errors: list[str] | None) -> Minio | None:
     """
     Obtain and return a *MinIO* client object.
 
+    :param engine_id: the reference MinIO engine
     :param errors: incidental error messages (might be a non-empty list)
     :return: the MinIO client object, or *None* if error
     """
@@ -66,7 +71,7 @@ def get_client(errors: list[str] | None) -> Minio | None:
     result: Minio | None = None
 
     # retrieve the access parameters
-    minio_params: dict[S3Param, Any] = _get_params(engine=S3Engine.MINIO)
+    minio_params: dict[S3Param, Any] = _get_params(engine_id=engine_id)
 
     # obtain the MinIO client
     try:
@@ -75,20 +80,21 @@ def get_client(errors: list[str] | None) -> Minio | None:
                        endpoint=minio_params.get(S3Param.ENDPOINT_URL),
                        secure=minio_params.get(S3Param.SECURE_ACCESS),
                        region=minio_params.get(S3Param.REGION_NAME))
-        if _S3_LOGGERS[S3Engine.MINIO]:
-            _S3_LOGGERS[S3Engine.MINIO].debug(msg="Minio client created")
+        if _S3_LOGGERS[engine_id]:
+            _S3_LOGGERS[engine_id].debug(msg="Minio client created")
 
     except Exception as e:
         msg: str = _except_msg(exception=e,
-                               engine=S3Engine.MINIO)
-        if _S3_LOGGERS[S3Engine.MINIO]:
-            _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                               engine_id=engine_id)
+        if _S3_LOGGERS[engine_id]:
+            _S3_LOGGERS[engine_id].error(msg=msg)
         if isinstance(errors, list):
             errors.append(msg)
     return result
 
 
-def data_retrieve(identifier: str,
+def data_retrieve(engine_id: str,
+                  identifier: str,
                   bucket: str = None,
                   prefix: str | Path = None,
                   data_range: tuple[int, int] = None,
@@ -97,6 +103,7 @@ def data_retrieve(identifier: str,
     """
     Retrieve data from the *MinIO* store.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the data identifier
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param prefix: optional path prefixing the item to be retrieved
@@ -109,10 +116,11 @@ def data_retrieve(identifier: str,
     result: bytes | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         offset: int = data_range[0] if data_range else 0
         length: int = data_range[1] - data_range[0] + 1 if data_range else 0
@@ -129,21 +137,22 @@ def data_retrieve(identifier: str,
                                                        offset=offset,
                                                        length=length)
             result = response.data
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if not (hasattr(e, "code") and e.code == "NoSuchKey"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def data_store(identifier: str,
+def data_store(engine_id: str,
+               identifier: str,
                data: bytes | str | BinaryIO,
                length: int,
                prefix: str | Path = None,
@@ -164,6 +173,7 @@ def data_store(identifier: str,
     On success, this operation returns a *dict* obtained from converting the
     *ObjectWriteResult* object returned from the native invocation.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the data identifier
     :param data: the data to store
     :param length: the length of the data
@@ -179,10 +189,11 @@ def data_store(identifier: str,
     result: dict[str, str] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         bin_data: BinaryIO
         if isinstance(data, BinaryIO):
@@ -209,21 +220,22 @@ def data_store(identifier: str,
             if reply:
                 # convert 'reply' to a 'dict'
                 result = obj_to_dict(obj=reply)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Stored '{obj_name}', bucket '{bucket}', "
-                                                          f"content type '{mimetype}', tags '{tags}'")
+                # if _S3_LOGGERS[engine_id]:
+                #     _S3_LOGGERS[engine_id].debug(msg=f"Stored '{obj_name}', bucket '{bucket}', "
+                #                                           f"content type '{mimetype}', tags '{tags}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
 
     return result
 
 
-def file_retrieve(identifier: str,
+def file_retrieve(engine_id: str,
+                  identifier: str,
                   filepath: Path | str,
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -232,6 +244,7 @@ def file_retrieve(identifier: str,
     """
     Retrieve a file from the *MinIO* store.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the file identifier, tipically a file name
     :param filepath: the path to save the retrieved file at
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -244,10 +257,11 @@ def file_retrieve(identifier: str,
     result: bool | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -260,22 +274,23 @@ def file_retrieve(identifier: str,
                                object_name=obj_name,
                                file_path=file_path)
             result = Path(filepath).exists()
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"{obj_name}', bucket '{bucket}', "
-                                                      f"{'retrieved' if result else 'not retrieved'}")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"{obj_name}', bucket '{bucket}', "
+                                                 f"{'retrieved' if result else 'not retrieved'}")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if not (hasattr(e, "code") and e.code == "NoSuchKey"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def file_store(identifier: str,
+def file_store(engine_id: str,
+               identifier: str,
                filepath: Path | str,
                mimetype: Mimetype | str,
                bucket: str = None,
@@ -286,6 +301,7 @@ def file_store(identifier: str,
     """
     Store a file at the *MinIO* store.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the file identifier, tipically a file name
     :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
@@ -300,10 +316,11 @@ def file_store(identifier: str,
     result: bool = False
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         tags = _minio_tags(tags)
         try:
@@ -320,23 +337,24 @@ def file_store(identifier: str,
                                                            file_path=file_path,
                                                            content_type=mimetype,
                                                            tags=tags)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=(f"Stored '{obj_name}', "
-                                                       f"bucket '{bucket}', from '{file_path}', "
-                                                       f"content type '{mimetype}', tags '{tags}'"))
+            # if _S3_LOGGERS[engine_id]:
+            #     _S3_LOGGERS[engine_id].debug(msg=(f"Stored '{obj_name}', "
+            #                                            f"bucket '{bucket}', from '{file_path}', "
+            #                                            f"content type '{mimetype}', tags '{tags}'"))
             result = True
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
 
     return result
 
 
-def item_get_info(identifier: str,
+def item_get_info(engine_id: str,
+                  identifier: str,
                   attributes: list[str],
                   bucket: str = None,
                   prefix: str | Path = None,
@@ -354,6 +372,7 @@ def item_get_info(identifier: str,
         - *is_dir*: a *bool* indicating if the item is a directory
         - *version_id*: the version of the item, if bucket versioning is enabled
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the item identifier
     :param attributes: the item's attributes to be returned
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -366,10 +385,11 @@ def item_get_info(identifier: str,
     result: dict[str, Any] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -381,15 +401,15 @@ def item_get_info(identifier: str,
                                                     object_name=obj_name)
             # retrieve mutable key-value pairs from the '__dict__' attribute of 'stats'
             result = vars(stats)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Got info for '{obj_name}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Got info for '{obj_name}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if not (hasattr(e, "code") and e.code == "NoSuchKey"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
 
@@ -401,7 +421,8 @@ def item_get_info(identifier: str,
     return result
 
 
-def item_get_tags(identifier: str,
+def item_get_tags(engine_id: str,
+                  identifier: str,
                   prefix: str | Path = None,
                   bucket: str = None,
                   client: Minio = None,
@@ -411,6 +432,7 @@ def item_get_tags(identifier: str,
 
     If item was not found, or has no associated metadata tags, an empty *dict* is returned.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the object identifier
     :param prefix: optional path prefixing the item
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -422,10 +444,11 @@ def item_get_tags(identifier: str,
     result: dict[str, Any] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         try:
             if prefix:
@@ -439,22 +462,23 @@ def item_get_tags(identifier: str,
                 result = dict(tags.items())
             else:
                 result = {}
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Retrieved '{obj_name}', "
-                                                      f"bucket '{bucket}', tags '{result}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_name}', "
+                                                 f"bucket '{bucket}', tags '{result}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
             if not (hasattr(e, "code") and e.code == "NoSuchKey"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def item_remove(identifier: str,
+def item_remove(engine_id: str,
+                identifier: str,
                 prefix: str | Path = None,
                 version: str = None,
                 bucket: str = None,
@@ -465,6 +489,7 @@ def item_remove(identifier: str,
 
     If *version* is not specified, then only the item's current (latest) version is removed.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the item identifier
     :param prefix: optional path prefixing the item to be removed
     :param version: optional version of the item to be removed (defaults to the its current version)
@@ -477,10 +502,11 @@ def item_remove(identifier: str,
     result: bool | None = False
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
 
         path: Path = Path(prefix) / identifier
@@ -490,23 +516,24 @@ def item_remove(identifier: str,
             client.remove_object(bucket_name=bucket,
                                  object_name=name,
                                  version_id=version)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Removed item '{name}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Removed item '{name}', bucket '{bucket}'")
             result = True
         except Exception as e:
             result = None
             # noinspection PyUnresolvedReferences
             if not (hasattr(e, "code") and e.code == "NoSuchKey"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.MINIO)
-                if _S3_LOGGERS[S3Engine.MINIO]:
-                    _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                       engine_id=engine_id)
+                if _S3_LOGGERS[engine_id]:
+                    _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
     return result
 
 
-def items_get_info(attributes: list[str],
+def items_get_info(engine_id: str,
+                   attrs: list[str],
                    prefix: str | Path,
                    max_count: int = None,
                    start_after: str = None,
@@ -522,6 +549,7 @@ def items_get_info(attributes: list[str],
     the listing must start, thus allowing for paginating the items retrieval operation.
 
     The information returned by the native invocation is shown below, lexicographically sorted by *object_name*.
+    The parameter *attrs* must contain one or more of these attributes.
         - *object_name*: the name of the item
         - *last_modified*: the date and time the item was last modified
         - *size*: the size of the item in bytes
@@ -529,7 +557,8 @@ def items_get_info(attributes: list[str],
         - *is_dir*: a *bool* indicating if the item is a directory
         - *version_id*: the version of the item, if bucket versioning is enabled
 
-    :param attributes: the items' attributes to be returned
+    :param engine_id: the reference MinIO engine
+    :param attrs: the items' attributes to be returned
     :param prefix: path prefixing the items to be listed
     :param max_count: the maximum number of items to return
     :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
@@ -542,10 +571,11 @@ def items_get_info(attributes: list[str],
     result: list[dict[str, Any]] | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         # must terminate with '/', otherwise only the folder is considered
         path: str = Path(prefix).as_posix() + "/" if prefix else None
@@ -571,22 +601,23 @@ def items_get_info(attributes: list[str],
             # save the items and log the results
             result = []
             for item in items:
-                result.append({k: v for k, v in item.items() if k in attributes})
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Listed {len(result)} "
-                                                      f"items in '{prefix}', bucket '{bucket}'")
+                result.append({k: v for k, v in item.items() if k in attrs})
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Listed {len(result)} "
+                                                 f"items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
 
     return result
 
 
-def items_count(prefix: str | Path | None,
+def items_count(engine_id: str,
+                prefix: str | Path | None,
                 bucket: str = None,
                 client: Minio = None,
                 errors: list[str] = None) -> int | None:
@@ -597,6 +628,7 @@ def items_count(prefix: str | Path | None,
     of a *prefix* may be extremely time-consuming, as the only way to obtain such information with
     the *minio* package is by retrieving and counting the elements from the appropriate iterators.
 
+    :param engine_id: the reference MinIO engine
     :param prefix: path prefixing the items to be counted
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional AWS client (obtains a new one, if not provided)
@@ -607,10 +639,11 @@ def items_count(prefix: str | Path | None,
     result: int | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         obj_path: str = Path(prefix).as_posix()
         try:
@@ -633,20 +666,21 @@ def items_count(prefix: str | Path | None,
 
             # save the count and log the results
             result = count
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
-                                   engine=S3Engine.MINIO)
-            if _S3_LOGGERS[S3Engine.MINIO]:
-                _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                   engine_id=engine_id)
+            if _S3_LOGGERS[engine_id]:
+                _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
 
     return result
 
 
-def items_remove(identifiers: list[str | tuple[str, str]] = None,
+def items_remove(engine_id: str,
+                 identifiers: list[str | tuple[str, str]] = None,
                  prefix: str | Path = None,
                  bucket: str = None,
                  client: Minio = None,
@@ -662,6 +696,7 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
     The removal operation will attempt to continue if errors occur. Thus, make sure to check *errors*,
     besides inspecting the returned value.
 
+    :param engine_id: the reference MinIO engine
     :param identifiers: identifiers for the items to be removed (defaults to all items in *prefix*)
     :param prefix: optional path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -674,10 +709,11 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
 
     if identifiers:
         # make sure to have a client
-        client = client or get_client(errors=errors)
+        client = client or get_client(engine_id=engine_id,
+                                      errors=errors)
         if client:
             # make sure to have a bucket
-            bucket = bucket or _get_param(engine=S3Engine.AWS,
+            bucket = bucket or _get_param(engine_id=S3Engine.AWS,
                                           param=S3Param.BUCKET_NAME)
             # establish a path prefix
             path: Path = Path(prefix) if isinstance(prefix, str) else prefix
@@ -704,15 +740,16 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
                                        for e in (reply or [])])
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
-                                           engine=S3Engine.MINIO)
-                    if _S3_LOGGERS[S3Engine.MINIO]:
-                        _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                           engine_id=engine_id)
+                    if _S3_LOGGERS[engine_id]:
+                        _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
                 pos += size
                 size = min(1000, len(identifiers) - pos)
     elif prefix:
-        result = prefix_remove(prefix=prefix,
+        result = prefix_remove(engine_id=engine_id,
+                               prefix=prefix,
                                bucket=bucket,
                                client=client,
                                errors=errors)
@@ -722,7 +759,8 @@ def items_remove(identifiers: list[str | tuple[str, str]] = None,
     return result
 
 
-def prefix_remove(prefix: str | Path | None,
+def prefix_remove(engine_id: str,
+                  prefix: str | Path | None,
                   bucket: str = None,
                   client: Minio = None,
                   errors: list[str] = None) -> int:
@@ -734,6 +772,7 @@ def prefix_remove(prefix: str | Path | None,
     will attempt to continue if errors occur. Thus, make sure to check *errors*, besides inspecting
     the returned value.
 
+    :param engine_id: the reference MinIO engine
     :param prefix: path prefixing the items to be removed
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param client: optional MinIO client (obtains a new one, if not provided)
@@ -744,12 +783,14 @@ def prefix_remove(prefix: str | Path | None,
     result: int = 0
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.AWS,
+        bucket = bucket or _get_param(engine_id=S3Engine.AWS,
                                       param=S3Param.BUCKET_NAME)
-        items: list[dict[str, Any]] = items_get_info(attributes=["Key"],
+        items: list[dict[str, Any]] = items_get_info(engine_id=engine_id,
+                                                     attrs=["Key"],
                                                      bucket=bucket,
                                                      prefix=prefix,
                                                      client=client,
@@ -778,9 +819,9 @@ def prefix_remove(prefix: str | Path | None,
                                        for e in (reply or [])])
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
-                                           engine=S3Engine.MINIO)
-                    if _S3_LOGGERS[S3Engine.MINIO]:
-                        _S3_LOGGERS[S3Engine.MINIO].error(msg=msg)
+                                           engine_id=engine_id)
+                    if _S3_LOGGERS[engine_id]:
+                        _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
                 pos += size
@@ -789,7 +830,8 @@ def prefix_remove(prefix: str | Path | None,
     return result
 
 
-def generate_presigned_url(identifier: str,
+def generate_presigned_url(engine_id: str,
+                           identifier: str,
                            expires_in: int,
                            prefix: str | Path = None,
                            bucket: str = None,
@@ -798,6 +840,7 @@ def generate_presigned_url(identifier: str,
     """
     Generate a presigned URL that grants time-limited, no credentials required, access to a private MinIo object.
 
+    :param engine_id: the reference MinIO engine
     :param identifier: the data identifier
     :param expires_in: time until expiration (in seconds, defaults to 3600)
     :param prefix: optional path prefixing the item to be retrieved
@@ -810,10 +853,11 @@ def generate_presigned_url(identifier: str,
     result: str | None = None
 
     # make sure to have a client
-    client = client or get_client(errors=errors)
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
     if client:
         # make sure to have a bucket
-        bucket = bucket or _get_param(engine=S3Engine.MINIO,
+        bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
         # generate the URL
         try:
@@ -836,7 +880,7 @@ def generate_presigned_url(identifier: str,
             if (not (hasattr(e, "code") and e.code == "NoSuchKey")) and \
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
-                                       engine=S3Engine.AWS)
+                                       engine_id=S3Engine.AWS)
                 if _S3_LOGGERS[S3Engine.AWS]:
                     _S3_LOGGERS[S3Engine.AWS].error(msg=msg)
                 if isinstance(errors, list):
