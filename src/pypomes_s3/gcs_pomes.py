@@ -78,7 +78,7 @@ def gcs_setup(*,
         }
     else:
         err_msg = "'bucket_name' and either 'credentials' or 'project_id' must be provided"
-        if _S3_LOGGERS[engine_id]:
+        if _S3_LOGGERS.get(engine_id):
             _S3_LOGGERS[engine_id].error(msg=err_msg)
         if isinstance(errors, list):
             errors.append(err_msg)
@@ -109,13 +109,13 @@ def get_client(engine_id: str,
                             credentials=gcs_credentials)
         else:
             result = Client(project=project_id)
-        if _S3_LOGGERS[engine_id]:
+        if _S3_LOGGERS.get(engine_id):
             _S3_LOGGERS[engine_id].debug(msg="*GCS* client created")
 
     except Exception as e:
         msg: str = _except_msg(exception=e,
                                engine_id=engine_id)
-        if _S3_LOGGERS[engine_id]:
+        if _S3_LOGGERS.get(engine_id):
             _S3_LOGGERS[engine_id].error(msg=msg)
         if isinstance(errors, list):
             errors.append(msg)
@@ -147,22 +147,22 @@ def startup(engine_id: str,
         try:
             client.get_bucket(bucket_or_name=bucket)
             result = True
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Started GCS, bucket '{bucket}' asserted")
         except Exception as e1:
             # log the exception and try to create a bucket
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].warning(msg=_except_msg(exception=e1,
                                                                engine_id=engine_id))
             try:
                 client.create_bucket(bucket_or_name=bucket)
                 result = True
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].debug(msg=f"Started GCS, bucket '{bucket}' created")
             except Exception as e2:
                 msg = _except_msg(exception=e2,
                                   engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -211,13 +211,13 @@ def data_retrieve(engine_id: str,
             gcs_blob: Blob = gcs_bucket.blob(blob_name=obj_key)
             result = gcs_blob.download_as_bytes(start=from_byte,
                                                 end=to_byte)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not isinstance(e, NotFound):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -248,7 +248,7 @@ def data_store(engine_id: str,
     :param data: the data to store
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param length:  the length of the data
-    :param prefix: optional path prefixing the item holding the data
+    :param prefix: optional destination path prefixing the item holding the data
     :param mimetype: the data mimetype, defaults to *BINARY*
     :param tags: optional metadata tags describing the file
     :param client: optional *GCS* client (obtains a new one, if not provided)
@@ -285,13 +285,13 @@ def data_store(engine_id: str,
             gcs_blob.upload_from_file(file_obj=bin_data,
                                       size=length,
                                       content_type=mimetype)
-            # if _S3_LOGGERS[engine_id]:
+            # if _S3_LOGGERS.get(engine_id):
             #     _S3_LOGGERS[engine_id].debug(msg=(f"Stored '{obj_key}', bucket '{bucket}', "
             #                                          f"content type '{mimetype}', tags '{tags}'"))
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -337,7 +337,7 @@ def file_retrieve(engine_id: str,
             gcs_blob: Blob = gcs_bucket.blob(blob_name=obj_key)
             gcs_blob.download_to_filename(filename=file_path)
             result = Path(filepath).exists()
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"{obj_key}', bucket '{bucket}', "
                                                  f"{'retrieved' if result else 'not retrieved'}")
         except Exception as e:
@@ -345,7 +345,7 @@ def file_retrieve(engine_id: str,
                 result = None
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -369,7 +369,7 @@ def file_store(engine_id: str,
     :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
     :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param prefix: optional path prefixing the item holding the file data
+    :param prefix: optional destination path prefixing the item holding the file data
     :param tags: optional metadata tags describing the file
     :param client: optional *GCS* client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
@@ -402,7 +402,7 @@ def file_store(engine_id: str,
 
             gcs_blob.upload_from_filename(filename=file_path,
                                           content_type=mimetype)
-            # if _S3_LOGGERS[engine_id]:
+            # if _S3_LOGGERS.get(engine_id):
             #     _S3_LOGGERS[engine_id].debug(msg=f"Stored '{obj_key}', "
             #                                         f"bucket '{bucket}', from '{file_path}', "
             #                                         f"content type '{mimetype}', tags '{tags}'")
@@ -410,7 +410,7 @@ def file_store(engine_id: str,
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -494,13 +494,13 @@ def item_get_info(engine_id: str,
                 if f"metadata.{key}" in attributes:
                     result[key] = value
 
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Got info for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not isinstance(e, NotFound):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -549,13 +549,13 @@ def item_get_tags(engine_id: str,
             gcs_blob.reload()
             result = gcs_blob.metadata or {}
 
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Got tags for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not isinstance(e, NotFound):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -610,14 +610,14 @@ def item_remove(engine_id: str,
                                              generation=version)
             gcs_blob.delete()
             result = True
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Deleted '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not isinstance(e, NotFound):
                 result = None
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -734,7 +734,7 @@ def items_get_info(engine_id: str,
 
             # save the items and log the results
             result = items
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 msg: str = f"Listed {len(result)} items in '{prefix}', bucket '{bucket}'"
                 if start_after:
                     msg += f", starting after {start_after}"
@@ -742,7 +742,7 @@ def items_get_info(engine_id: str,
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -817,7 +817,7 @@ def items_get_tags(engine_id: str,
 
             # save the items and log the results
             result = items
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 msg: str = f"Listed {len(result)} items in '{prefix}', bucket '{bucket}'"
                 if start_after:
                     msg += f", starting after {start_after}"
@@ -825,7 +825,7 @@ def items_get_tags(engine_id: str,
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -932,7 +932,7 @@ def items_remove(engine_id: str,
             except Exception as e:
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -983,13 +983,13 @@ def generate_presigned_url(engine_id: str,
             expiration: timedelta = timedelta(seconds=expires_in)
             result = gcs_blob.generate_signed_url(expiration=expiration,
                                                   method="GET")
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Generated presigned URL for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             if not isinstance(e, NotFound):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)

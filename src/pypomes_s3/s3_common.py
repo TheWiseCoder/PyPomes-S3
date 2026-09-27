@@ -101,19 +101,19 @@ def __get_access_data() -> dict[str, dict[S3Param, Any]]:
             S3Param.TYPE: s3_type,
             S3Param.VERSION: ""
         }
-        if engine == S3Engine.AWS or engine == S3Engine.MINIO:
+        if s3_type in [S3Engine.AWS, S3Engine.MINIO]:
             result[engine].update({
                 S3Param.ENDPOINT_URL: env_get_str(key=f"{APP_PREFIX}_{prefix}_ENDPOINT_URL"),
                 S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_BUCKET_NAME"),
                 S3Param.ACCESS_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_ACCESS_KEY"),
                 S3Param.SECRET_KEY: env_get_str(key=f"{APP_PREFIX}_{prefix}_SECRET_KEY"),
-                S3Param.SECURE_ACCESS: env_get_bool(key=f"{APP_PREFIX}_{prefix}_SECURE_ACCESS"),
                 S3Param.REGION_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_REGION_NAME")
             })
-        elif engine == S3Engine.GCS:
+            if s3_type == S3Engine.MINIO:
+                result[engine][S3Param.SECURE_ACCESS] = env_get_bool(key=f"{APP_PREFIX}_{prefix}_SECURE_ACCESS")
+        elif s3_type == S3Engine.GCS:
             result[engine][S3Param.PROJECT_ID] = env_get_str(key=f"{APP_PREFIX}_{prefix}_PROJECT_ID")
-        if engine not in _S3_LOGGERS:
-            _S3_LOGGERS[engine] = None
+        _S3_LOGGERS[engine] = None
 
     return result
 
@@ -135,7 +135,7 @@ def _assert_engine(engine: S3Engine | str,
     :return: the validated or the default engine
     """
     # initialize the return valiable
-    result: tuple[str, S3Engine] | None = None
+    result: tuple[str | None, S3Engine | None] | None = None
 
     for key, value in _S3_ACCESS_DATA.items():
         if not engine or engine == key:
@@ -147,8 +147,10 @@ def _assert_engine(engine: S3Engine | str,
                 result = (key, value[S3Param.TYPE])
                 break
 
-    if not result and isinstance(errors, list):
-        errors.append(f"S3 engine '{engine}' unknown or not configured")
+    if not result:
+        if isinstance(errors, list):
+            errors.append(f"S3 engine '{engine}' unknown or not configured")
+        result = (None, None)
 
     return result
 

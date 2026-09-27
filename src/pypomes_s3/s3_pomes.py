@@ -18,7 +18,8 @@ def s3_setup(*,
              secret_key: str,
              s3_type: S3Engine = None,
              region_name: str = None,
-             secure_access: bool = None) -> bool:
+             secure_access: bool = None,
+             logger: Logger = None) -> bool:
     """
     Establish the parameters for access to *engine* of type *AWS* or *MinIO*.
 
@@ -33,6 +34,7 @@ def s3_setup(*,
     :param s3_type: the S3 engine type (one of [*aws*, *minio*, *gcs*])
     :param region_name: the name of the region where the engine is located
     :param secure_access: whether to use Transport Security Layer
+    :param logger: the logger for the S3 engine
     :return: *True* if the data were accepted, *False* otherwise
     """
     # initialize the return variable
@@ -43,24 +45,40 @@ def s3_setup(*,
             s3_type = engine
         engine = engine.value
 
-    # process te parameters
-    if engine in S3Engine and \
-       endpoint_url and bucket_name and \
-       access_key and secret_key:
+    # process the parameters
+    if engine in S3Engine and endpoint_url and \
+       bucket_name and access_key and secret_key:
         _S3_ACCESS_DATA[engine] = {
             S3Param.ENGINE: engine,
-            S3Param.ENDPOINT_URL: endpoint_url,
+            S3Param.TYPE: s3_type,
             S3Param.BUCKET_NAME: bucket_name,
+            S3Param.ENDPOINT_URL: endpoint_url,
             S3Param.ACCESS_KEY: access_key,
             S3Param.SECRET_KEY: secret_key,
-            S3Param.SECURE_ACCESS: secure_access,
-            S3Param.REGION_NAME: region_name,
-            S3Param.TYPE: s3_type,
             S3Param.VERSION: ""
         }
+        if s3_type == S3Engine.AWS:
+            _S3_ACCESS_DATA[engine][S3Param.REGION_NAME]: region_name
+        elif s3_type == S3Engine.MINIO:
+            _S3_ACCESS_DATA[engine][S3Param.SECURE_ACCESS] = secure_access
+        _S3_LOGGERS[engine] = logger
         result = True
 
     return result
+
+
+def s3_remove(*,
+              engine: S3Engine | str) -> None:
+    """
+    Unconditionally remove *engine* from the list of configured S3 engines.
+
+    :param engine: the S3 engine identification
+    """
+    # assert and remove the S3 engine
+    engine_id, _engine_type = _assert_engine(engine=engine)
+    if engine_id:
+        _S3_ACCESS_DATA.pop(engine_id)
+        _S3_LOGGERS.pop(engine_id, None)
 
 
 def s3_set_logger(engine: S3Engine | str = None,
@@ -151,7 +169,17 @@ def s3_get_params(engine: S3Engine | str = None) -> dict[S3Param, Any] | None:
     return result
 
 
-def s3_startup(engine: S3Engine = None,
+def s3_get_type(engine: S3Engine | str = None) -> S3Engine:
+    """
+    Return the current value for the type of the S3 engine for the instance identified by *engine*.
+
+    :param engine: the reference S3 engine (the default engine, if not provided)
+    :return: the engine type for instance *engine*, or *None* if not found
+    """
+    return _assert_engine(engine=engine)[1]
+
+
+def s3_startup(engine: S3Engine | str = None,
                bucket: str = None,
                errors: list[str] = None) -> bool:
     """
@@ -161,7 +189,7 @@ def s3_startup(engine: S3Engine = None,
     to make sure the interaction with the S3 service is fully functional.
 
     :param engine: the S3 engine to use (uses the default engine, if not provided)
-    :param bucket: the bucket to use
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
     :return: *True* if service is fully functional, *False* otherwise
     """
@@ -323,7 +351,7 @@ def s3_data_store(identifier: str,
     :param identifier: the data identifier
     :param data: the data to store
     :param length: the length of the data
-    :param prefix: optional path prefixing the item holding the data
+    :param prefix: optional destination path prefixing the item holding the data
     :param mimetype: the data mimetype, defaults to *BINARY*
     :param tags: optional metadata tags describing the data
     :param bucket: the bucket to use (uses the default bucket, if not provided)
@@ -381,7 +409,7 @@ def s3_file_retrieve(identifier: str,
                      filepath: Path | str,
                      bucket: str = None,
                      prefix: str | Path = None,
-                     engine: S3Engine = None,
+                     engine: S3Engine | str = None,
                      client: Any = None,
                      errors: list[str] = None) -> bool | None:
     """
@@ -438,7 +466,7 @@ def s3_file_store(identifier: str,
                   tags: dict = None,
                   bucket: str = None,
                   prefix: str | Path = None,
-                  engine: S3Engine = None,
+                  engine: S3Engine | str = None,
                   client: Any = None,
                   errors: list[str] = None) -> bool:
     """
@@ -449,7 +477,7 @@ def s3_file_store(identifier: str,
     :param mimetype: the file mimetype
     :param tags: optional metadata tags describing the file
     :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param prefix: optional path prefixing the item holding the file data
+    :param prefix: optional destination path prefixing the item holding the file data
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param client: optional S3 client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
@@ -500,7 +528,7 @@ def s3_file_store(identifier: str,
 def s3_object_retrieve(identifier: str,
                        bucket: str = None,
                        prefix: str | Path = None,
-                       engine: S3Engine = None,
+                       engine: S3Engine | str = None,
                        client: Any = None,
                        errors: list[str] = None) -> Any:
     """
@@ -540,7 +568,7 @@ def s3_object_store(identifier: str,
                     tags: dict = None,
                     bucket: str = None,
                     prefix: str | Path = None,
-                    engine: S3Engine = None,
+                    engine: S3Engine | str = None,
                     client: Any = None,
                     errors: list[str] = None) -> dict[str, str] | None:
     """
@@ -553,10 +581,10 @@ def s3_object_store(identifier: str,
 
     :param identifier: the object identifier
     :param obj: object to be stored
-    :param tags: optional metadatatagsdescribing the object
+    :param tags: optional metadata tags describing the object
     :param engine: the S3 engine to use (uses the default engine, if not provided)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param prefix: optional path prefixing the item holding the the object
+    :param prefix: optional destination path prefixing the item holding the object
     :param client: optional S3 client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
     :return: the stored item's properties listed above, or *None* if error
@@ -590,7 +618,7 @@ def s3_object_store(identifier: str,
 def s3_item_exists(identifier: str,
                    prefix: str | Path = None,
                    bucket: str = None,
-                   engine: S3Engine = None,
+                   engine: S3Engine | str = None,
                    client: Any = None,
                    errors: list[str] = None) -> bool | None:
     """
@@ -629,7 +657,7 @@ def s3_item_get_info(identifier: str,
                      attributes: list[str],
                      prefix: str | Path = None,
                      bucket: str = None,
-                     engine: S3Engine = None,
+                     engine: S3Engine | str = None,
                      client: Any = None,
                      errors: list[str] = None) -> Any:
     """
@@ -686,7 +714,7 @@ def s3_item_get_info(identifier: str,
 def s3_item_get_tags(identifier: str,
                      prefix: str | Path = None,
                      bucket: str = None,
-                     engine: S3Engine = None,
+                     engine: S3Engine | str = None,
                      client: Any = None,
                      errors: list[str] = None) -> dict[str, Any] | None:
     """
@@ -740,7 +768,7 @@ def s3_item_remove(identifier: str,
                    prefix: str | Path = None,
                    version: str = None,
                    bucket: str = None,
-                   engine: S3Engine = None,
+                   engine: S3Engine | str = None,
                    client: Any = None,
                    errors: list[str] = None) -> int | None:
     """
@@ -798,7 +826,7 @@ def s3_items_get_info(attrs: list[str],
                       max_count: int = None,
                       start_after: str = None,
                       bucket: str = None,
-                      engine: S3Engine = None,
+                      engine: S3Engine | str = None,
                       client: Any = None,
                       errors: list[str] = None) -> list[dict[str, Any]] | None:
     """
@@ -865,7 +893,7 @@ def s3_items_get_info(attrs: list[str],
 
 def s3_items_count(prefix: str | Path | None,
                    bucket: str = None,
-                   engine: S3Engine = None,
+                   engine: S3Engine | str = None,
                    client: Any = None,
                    errors: list[str] = None) -> int | None:
     """
@@ -914,7 +942,7 @@ def s3_items_count(prefix: str | Path | None,
 def s3_items_remove(identifiers: list[str | tuple[str, str]] = None,
                     prefix: str | Path = None,
                     bucket: str = None,
-                    engine: S3Engine = None,
+                    engine: S3Engine | str = None,
                     client: Any = None,
                     errors: list[str] = None) -> int:
     """
@@ -973,7 +1001,7 @@ def s3_generate_presigned_url(identifier: str,
                               prefix: str | Path = None,
                               expires_in: int = None,
                               bucket: str = None,
-                              engine: S3Engine = None,
+                              engine: S3Engine | str = None,
                               client: Any = None,
                               errors: list[str] = None) -> str:
     """

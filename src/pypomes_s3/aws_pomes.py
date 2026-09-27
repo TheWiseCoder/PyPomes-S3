@@ -36,13 +36,13 @@ def get_client(engine_id: str,
                               endpoint_url=aws_params.get(S3Param.ENDPOINT_URL),
                               aws_access_key_id=aws_params.get(S3Param.ACCESS_KEY),
                               aws_secret_access_key=aws_params.get(S3Param.SECRET_KEY))
-        if _S3_LOGGERS[engine_id]:
+        if _S3_LOGGERS.get(engine_id):
             _S3_LOGGERS[engine_id].debug(msg="AWS client created")
 
     except Exception as e:
         msg: str = _except_msg(exception=e,
                                engine_id=engine_id)
-        if _S3_LOGGERS[engine_id]:
+        if _S3_LOGGERS.get(engine_id):
             _S3_LOGGERS[engine_id].error(msg=msg)
         if isinstance(errors, list):
             errors.append(msg)
@@ -73,22 +73,22 @@ def startup(engine_id: str,
         try:
             client.head_bucket(Bucket=bucket)
             result = True
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Started AWS, bucket '{bucket}' asserted")
         except Exception as e1:
             # log the exception and try to create a bucket
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].warning(msg=_except_msg(exception=e1,
                                                                engine_id=engine_id))
             try:
                 client.create_bucket(Bucket=bucket)
                 result = True
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].debug(msg=f"Started AWS, bucket '{bucket}' created")
             except Exception as e2:
                 msg = _except_msg(exception=e2,
                                   engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -136,7 +136,7 @@ def data_retrieve(engine_id: str,
                                                       Key=obj_key,
                                                       Range=obj_range)
             result = reply["Body"]
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
@@ -144,7 +144,7 @@ def data_retrieve(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -168,7 +168,7 @@ def data_store(engine_id: str,
     Note that *length* is the number of bytes of *data* to be stored. This might lead to error when storing
     strings. In Python, a standard string is a sequence of Unicode code points, not bytes, and thus:
       - *len(string)*: returns the number of characters (Unicode code points)
-      - *len(string.encode('utf-8'))*: returns the number of bytes the string occupies when encoded
+      - *len(string.encode("utf-8"))*: returns the number of bytes the string occupies when encoded
 
     On success, this operation returns a *dict* with information related to the stored item.
     Unfortunately, it is not possible to detail the information returned, as there is no consistency
@@ -180,7 +180,7 @@ def data_store(engine_id: str,
     :param data: the data to store
     :param bucket: the bucket to use (uses the default bucket, if not provided)
     :param length:  the length of the data
-    :param prefix: optional path prefixing the item holding the data
+    :param prefix: optional destination path prefixing the item holding the data
     :param mimetype: the data mimetype, defaults to *BINARY*
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
@@ -221,13 +221,13 @@ def data_store(engine_id: str,
                                        ContentType=mimetype,
                                        Key=obj_key,
                                        Metadata=_normalize_tags(tags))
-            # if _S3_LOGGERS[engine_id]:
+            # if _S3_LOGGERS.get(engine_id):
             #     _S3_LOGGERS[engine_id].debug(msg=(f"Stored '{obj_key}', bucket '{bucket}', "
             #                                       f"content type '{mimetype}', tags '{tags}'"))
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -274,7 +274,7 @@ def file_retrieve(engine_id: str,
                                  Filename=file_path,
                                  Key=obj_key)
             result = Path(filepath).exists()
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"{obj_key}', bucket '{bucket}', "
                                                  f"{'retrieved' if result else 'not retrieved'}")
         except Exception as e:
@@ -283,7 +283,7 @@ def file_retrieve(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -307,7 +307,7 @@ def file_store(engine_id: str,
     :param filepath: optional path specifying where the file is
     :param mimetype: the file mimetype
     :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param prefix: optional path prefixing the item holding the file data
+    :param prefix: optional destination path prefixing the item holding the file data
     :param tags: optional metadata tags describing the file
     :param client: optional AWS client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
@@ -346,7 +346,7 @@ def file_store(engine_id: str,
                                Bucket=bucket,
                                Key=obj_key,
                                ExtraArgs=extra_args)
-            # if _S3_LOGGERS[engine_id]:
+            # if _S3_LOGGERS.get(engine_id):
             #     _S3_LOGGERS[engine_id].debug(msg=f"Stored '{obj_key}', "
             #                                         f"bucket '{bucket}', from '{file_path}', "
             #                                         f"content type '{mimetype}', tags '{tags}'")
@@ -354,7 +354,7 @@ def file_store(engine_id: str,
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -438,7 +438,7 @@ def item_get_info(engine_id: str,
             result = client.get_object_attributes(Bucket=bucket,
                                                   Key=obj_key,
                                                   ObjectAttributes=attributes)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Got info for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
@@ -446,7 +446,7 @@ def item_get_info(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -533,7 +533,7 @@ def item_get_tags(engine_id: str,
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
             result = head_info.get("Metadata")
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
@@ -541,7 +541,7 @@ def item_get_tags(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -595,7 +595,7 @@ def item_remove(engine_id: str,
             reply: dict[str, Any] = client.delete_object(Bucket=bucket,
                                                          Key=key,
                                                          VersionId=version)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Deleted '{key}', bucket '{bucket}'")
             result = reply.get("DeleteMarker")
         except Exception as e:
@@ -604,7 +604,7 @@ def item_remove(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
@@ -733,7 +733,7 @@ def items_get_info(engine_id: str,
             result = []
             for item in items:
                 result.append({k: v for k, v in item.items() if k in attrs})
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 msg: str = f"Listed {len(result)} items in '{prefix}', bucket '{bucket}'"
                 if start_after:
                     msg += f", starting after {start_after}"
@@ -741,7 +741,7 @@ def items_get_info(engine_id: str,
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -785,12 +785,12 @@ def items_count(engine_id: str,
                                                         Delimiter="/")
             # traverse the pages, counting the items
             result = sum(page.get("KeyCount", 0) for page in iterator)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
@@ -868,7 +868,7 @@ def items_remove(engine_id: str,
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
                                            engine_id=engine_id)
-                    if _S3_LOGGERS[engine_id]:
+                    if _S3_LOGGERS.get(engine_id):
                         _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
@@ -946,7 +946,7 @@ def prefix_remove(engine_id: str,
                 except Exception as e:
                     msg: str = _except_msg(exception=e,
                                            engine_id=engine_id)
-                    if _S3_LOGGERS[engine_id]:
+                    if _S3_LOGGERS.get(engine_id):
                         _S3_LOGGERS[engine_id].error(msg=msg)
                     if isinstance(errors, list):
                         errors.append(msg)
@@ -996,7 +996,7 @@ def generate_presigned_url(engine_id: str,
                                                    Params={"Bucket": bucket,
                                                            "Key": obj_key},
                                                    ExpiresIn=expires_in)
-            if _S3_LOGGERS[engine_id]:
+            if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Generated presigned URL for '{obj_key}', bucket '{bucket}'")
         except Exception as e:
             # noinspection PyUnresolvedReferences
@@ -1004,7 +1004,7 @@ def generate_presigned_url(engine_id: str,
                (not hasattr(e, "response") and (e.response.get("Error") or {}).get("Code") == "404"):
                 msg: str = _except_msg(exception=e,
                                        engine_id=engine_id)
-                if _S3_LOGGERS[engine_id]:
+                if _S3_LOGGERS.get(engine_id):
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
