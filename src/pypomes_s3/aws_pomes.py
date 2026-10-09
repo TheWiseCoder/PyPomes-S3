@@ -532,7 +532,8 @@ def item_get_tags(engine_id: str,
                 obj_key: str = identifier
             head_info: dict[str, str] = client.head_object(Bucket=bucket,
                                                            Key=obj_key)
-            result = head_info.get("Metadata")
+            # make sure at least an empty dict is returned
+            result = head_info.get("Metadata", {})
             if _S3_LOGGERS.get(engine_id):
                 _S3_LOGGERS[engine_id].debug(msg=f"Retrieved '{obj_key}', bucket '{bucket}', tags '{result}'")
         except Exception as e:
