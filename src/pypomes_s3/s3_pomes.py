@@ -646,7 +646,7 @@ def s3_item_exists(identifier: str,
                                                  client=client,
                                                  errors=curr_errors)
     if not curr_errors:
-        result = isinstance(item_info, dict)
+        result = item_info is not None
     elif isinstance(errors, list):
         errors.extend(curr_errors)
 

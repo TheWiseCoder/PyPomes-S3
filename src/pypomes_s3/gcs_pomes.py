@@ -68,7 +68,7 @@ def gcs_setup(*,
         # initilize the GCS parameters
         if credentials:
             if not isinstance(credentials, dict):
-                credentials_bytes: bytes = file_get_data(file_data=credentials)
+                credentials_bytes: bytes = file_get_data(credentials)
                 credentials = json.loads(s=credentials_bytes)
             project_id = credentials.get("project_id")
         _S3_ACCESS_DATA[engine_id] = {

@@ -219,7 +219,7 @@ def data_store(engine_id: str,
                                                          tags=tags)
             if reply:
                 # convert 'reply' to a 'dict'
-                result = obj_to_dict(obj=reply)
+                result = obj_to_dict(reply)
                 # if _S3_LOGGERS.get(engine_id):
                 #     _S3_LOGGERS[engine_id].debug(msg=f"Stored '{obj_name}', bucket '{bucket}', "
                 #                                           f"content type '{mimetype}', tags '{tags}'")
