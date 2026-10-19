@@ -799,6 +799,97 @@ def items_count(engine_id: str,
     return result
 
 
+def items_get_names(engine_id: str,
+                    prefix: str | Path,
+                    max_count: int = None,
+                    start_after: str = None,
+                    bucket: str = None,
+                    client: BaseClient = None,
+                    errors: list[str] = None) -> list[dict[str, Any]] | None:
+    """
+    Recursively retrieve and return the names of items prefixed with *prefix*, in the *AWS* store.
+
+    If *prefix* is not specified, then the bucket's root is used. If *max_count* is a positive integer,
+    the number of items returned may be less, but not more, than its value, otherwise it is ignored, and
+    all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
+    the listing must start, thus allowing for paginating the item names retrieval operation.
+
+    :param engine_id: the reference AWS engine
+    :param prefix: path prefixing the items to be listed
+    :param max_count: the maximum number of items to return (defaults to all items)
+    :param start_after: optionally identifies the name after which to start the listing (defaults to first item)
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param client: optional AWS client (obtains a new one, if not provided)
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: names of items in *prefix*, or *None* if error or *prefix* not found
+    """
+    # initialize the return variable
+    result: list[str] | None = None
+
+    # make sure to have a client
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
+    if client:
+        # make sure to have a bucket
+        bucket = bucket or _get_param(engine_id=engine_id,
+                                      param=S3Param.BUCKET_NAME)
+        # must terminate with '/', otherwise only the folder is considered
+        path: str = Path(prefix).as_posix() + "/" if prefix else None
+        if not isinstance(max_count, int) or \
+           isinstance(max_count, bool) or max_count < 0:
+            max_count = 0
+        max_keys: int = max_count if 0 < max_count < 1000 else 1000
+        try:
+            items: list[dict[str, Any]] = []
+            proceed: bool = True
+            while proceed:
+                # retrieve up to 1000 objects at a time
+                reply: dict[str, Any]
+                # will raise an error if 'StartAfter' is set to 'None'
+                if start_after:
+                    reply = client.list_objects_v2(Bucket=bucket,
+                                                   Prefix=path,
+                                                   Delimiter="/",
+                                                   MaxKeys=max_keys,
+                                                   StartAfter=start_after)
+                else:
+                    reply = client.list_objects_v2(Bucket=bucket,
+                                                   Prefix=path,
+                                                   Delimiter="/",
+                                                   MaxKeys=max_keys)
+                # retrieve from the list (it might be empty)
+                proceed = False
+                objs: list[dict[str, Any]] = reply.get("Contents")
+                if objs:
+                    rem: int = min(max_count - len(items), len(objs)) if max_count else len(objs)
+                    items.extend(objs[:rem])
+                    rem = max_count - len(items) if max_count else 1000
+                    if rem > 0:
+                        # get the last key read
+                        start_after = objs[-1].get("Key")
+                        # set the value for the 'MaxKeys' parameter in the next objects retrieval
+                        max_keys = min(max_keys, rem)
+                        proceed = True
+
+            # save the items and log the results
+            result = []
+            for item in items:
+                result.append(item.get("Key"))
+            if _S3_LOGGERS.get(engine_id):
+                msg: str = f"Listed {len(result)} names in '{prefix}', bucket '{bucket}'"
+                if start_after:
+                    msg += f", starting after {start_after}"
+                _S3_LOGGERS[engine_id].debug(msg=msg)
+        except Exception as e:
+            msg: str = _except_msg(exception=e,
+                                   engine_id=engine_id)
+            if _S3_LOGGERS.get(engine_id):
+                _S3_LOGGERS[engine_id].error(msg=msg)
+            if isinstance(errors, list):
+                errors.append(msg)
+    return result
+
+
 def items_remove(engine_id: str,
                  identifiers: list[str | tuple[str, str]] = None,
                  prefix: str | Path = None,

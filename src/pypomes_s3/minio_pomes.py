@@ -532,6 +532,69 @@ def item_remove(engine_id: str,
     return result
 
 
+def items_count(engine_id: str,
+                prefix: str | Path | None,
+                bucket: str = None,
+                client: Minio = None,
+                errors: list[str] = None) -> int | None:
+    """
+    Retrieve the number of items prefixed with *prefix*, in the *MinIO* store.
+
+    If *prefix* is not specified, then the bucket's root is used. A count operation on the contents
+    of a *prefix* may be extremely time-consuming, as the only way to obtain such information with
+    the *minio* package is by retrieving and counting the elements from the appropriate iterators.
+
+    :param engine_id: the reference MinIO engine
+    :param prefix: path prefixing the items to be counted
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param client: optional MINIO client (obtains a new one, if not provided)
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: the number of items in *prefix*, 0 if *prefix* not found, or *None* if error
+    """
+    # initialize the return variable
+    result: int | None = None
+
+    # make sure to have a client
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
+    if client:
+        # make sure to have a bucket
+        bucket = bucket or _get_param(engine_id=engine_id,
+                                      param=S3Param.BUCKET_NAME)
+        obj_path: str = Path(prefix).as_posix()
+        try:
+            count: int = 0
+            proceed: bool = True
+            continuation: str | None = None
+            while proceed:
+                # obtain an iterator on the items in the folder
+                iterator: Iterator = client.list_objects(bucket_name=bucket,
+                                                         prefix=obj_path,
+                                                         include_user_meta=True,
+                                                         recursive=True,
+                                                         start_after=continuation)
+                # traverse the iterator (it might be empty)
+                proceed = False
+                for obj in iterator:
+                    count += 1
+                    continuation = obj.object_name
+                    proceed = True
+
+            # save the count and log the results
+            result = count
+            if _S3_LOGGERS.get(engine_id):
+                _S3_LOGGERS[engine_id].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
+        except Exception as e:
+            msg: str = _except_msg(exception=e,
+                                   engine_id=engine_id)
+            if _S3_LOGGERS.get(engine_id):
+                _S3_LOGGERS[engine_id].error(msg=msg)
+            if isinstance(errors, list):
+                errors.append(msg)
+
+    return result
+
+
 def items_get_info(engine_id: str,
                    attrs: list[str],
                    prefix: str | Path,
@@ -616,27 +679,32 @@ def items_get_info(engine_id: str,
     return result
 
 
-def items_count(engine_id: str,
-                prefix: str | Path | None,
-                bucket: str = None,
-                client: Minio = None,
-                errors: list[str] = None) -> int | None:
+def items_get_names(engine_id: str,
+                    prefix: str | Path,
+                    max_count: int = None,
+                    start_after: str = None,
+                    bucket: str = None,
+                    client: Minio = None,
+                    errors: list[str] = None) -> list[str] | None:
     """
-    Retrieve the number of items prefixed with *prefix*, in the *MinIO* store.
+    Recursively retrieve and return names of items prefixed with *prefix*, in the *MinIO* store.
 
-    If *prefix* is not specified, then the bucket's root is used. A count operation on the contents
-    of a *prefix* may be extremely time-consuming, as the only way to obtain such information with
-    the *minio* package is by retrieving and counting the elements from the appropriate iterators.
+    If *prefix* is not specified, then the bucket's root is used. If *max_count* is a positive integer,
+    the number of items returned may be less, but not more, than its value, otherwise it is ignored, and
+    all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
+    the listing must start, thus allowing for paginating the items retrieval operation.
 
     :param engine_id: the reference MinIO engine
-    :param prefix: path prefixing the items to be counted
+    :param prefix: path prefixing the items to be listed
+    :param max_count: the maximum number of items to return
+    :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
     :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param client: optional MINIO client (obtains a new one, if not provided)
+    :param client: optional MinIO client (obtains a new one, if not provided)
     :param errors: incidental error messages (might be a non-empty list)
-    :return: the number of items in *prefix*, 0 if *prefix* not found, or *None* if error
+    :return: the iterator into the list of items, or *None* if path not found or error
     """
     # initialize the return variable
-    result: int | None = None
+    result: list[str] | None = None
 
     # make sure to have a client
     client = client or get_client(engine_id=engine_id,
@@ -645,29 +713,36 @@ def items_count(engine_id: str,
         # make sure to have a bucket
         bucket = bucket or _get_param(engine_id=engine_id,
                                       param=S3Param.BUCKET_NAME)
-        obj_path: str = Path(prefix).as_posix()
+        # must terminate with '/', otherwise only the folder is considered
+        path: str = Path(prefix).as_posix() + "/" if prefix else None
         try:
-            count: int = 0
+            items: list[dict[str, Any]] = []
             proceed: bool = True
-            continuation: str | None = None
             while proceed:
                 # obtain an iterator on the items in the folder
-                iterator: Iterator = client.list_objects(bucket_name=bucket,
-                                                         prefix=obj_path,
-                                                         include_user_meta=True,
-                                                         recursive=True,
-                                                         start_after=continuation)
+                iterator: Iterator[MinioObject] = client.list_objects(bucket_name=bucket,
+                                                                      prefix=path,
+                                                                      include_user_meta=True,
+                                                                      recursive=True,
+                                                                      start_after=start_after)
                 # traverse the iterator (it might be empty)
                 proceed = False
                 for obj in iterator:
-                    count += 1
-                    continuation = obj.object_name
+                    items.append(vars(obj))
+                    if max_count and len(items) == max_count:
+                        break
+                    start_after = obj.object_name
                     proceed = True
 
-            # save the count and log the results
-            result = count
+            # save the items and log the results
+            result = []
+            for item in items:
+                result.append(item.get("object_name"))
             if _S3_LOGGERS.get(engine_id):
-                _S3_LOGGERS[engine_id].debug(msg=f"Counted {result} items in '{prefix}', bucket '{bucket}'")
+                msg: str = f"Listed {len(result)} names in '{prefix}', bucket '{bucket}'"
+                if start_after:
+                    msg += f", starting after {start_after}"
+                _S3_LOGGERS[engine_id].debug(msg=msg)
         except Exception as e:
             msg: str = _except_msg(exception=e,
                                    engine_id=engine_id)

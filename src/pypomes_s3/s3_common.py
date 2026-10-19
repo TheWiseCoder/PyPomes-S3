@@ -23,8 +23,8 @@ class S3Param(StrEnum):
     Parameters for connecting to S3 engines.
     """
     # all engines
-    ENGINE = "engine"
-    TYPE = "type"
+    ENGINE_ID = "engine-id"
+    ENGINE_TYPE = "engine-type"
     BUCKET_NAME = "bucket-name"
     VERSION = "version"
 
@@ -53,9 +53,10 @@ def __get_access_data() -> dict[str, dict[S3Param, Any]]:
     dynamically with 's3_setup()' is the preferred way for AWS and MinIO engines. Specifying S3 storage
     parameters with environment variables can be done in two ways:
       - 1. for a single S3 engine, specify the set
-           - *<APP_PREFIX>_S3_ENGINE*
-           - *<APP_PREFIX>_S3_TYPE* (one of *aws*, *minio*, *gcs*)
+           - *<APP_PREFIX>_S3_ENGINE_ID*
+           - *<APP_PREFIX>_S3_ENGINE_TYPE* (one of *aws*, *minio*, *gcs*)
            - *<APP_PREFIX>_S3_BUCKET_NAME*
+           - *<APP_PREFIX>_S3_CREDENTIALS* (GCS)
            - *<APP_PREFIX>_S3_PROJECT_ID* (GCS)
            - *<APP_PREFIX>_S3_ENDPOINT_URL* (AWS, MinIO)
            - *<APP_PREFIX>_S3_ACCESS_KEY* (AWS, MinIO)
@@ -72,7 +73,7 @@ def __get_access_data() -> dict[str, dict[S3Param, Any]]:
     result: dict[str, dict[S3Param, Any]] = {}
 
     engines: list[str] = []
-    single_engine: str = env_get_str(key=f"{APP_PREFIX}_S3_ENGINE")
+    single_engine: str = env_get_str(key=f"{APP_PREFIX}_S3_ENGINE_ID")
     if single_engine:
         default_setup: bool = True
         engines.append(single_engine)
@@ -88,17 +89,18 @@ def __get_access_data() -> dict[str, dict[S3Param, Any]]:
             default_setup = False
         else:
             prefix: str = engine
-        s3_type: S3Engine = env_get_enum(key=f"{APP_PREFIX}_{prefix}_TYPE",
-                                         enum_class=S3Engine)
+        s3_type: S3Engine = env_get_enum(key=f"{APP_PREFIX}_{prefix}_ENGINE_TYPE",
+                                         enum_class=S3Engine,
+                                         values=[S3Engine.AWS, S3Engine.MINIO])
         if not s3_type:
             s3_type = obj_positional(engine,
-                                     keys=("AWS", "MINIO", "GCS"),
-                                     values=(S3Engine.AWS, S3Engine.MINIO, S3Engine.GCS))
+                                     keys=("AWS", "MINIO"),
+                                     values=(S3Engine.AWS, S3Engine.MINIO))
         if not s3_type:
             raise ValueError(f"Unable to establish type for S3 engine '{engine}'")
         result[engine] = {
             S3Param.BUCKET_NAME: env_get_str(key=f"{APP_PREFIX}_{prefix}_BUCKET_NAME"),
-            S3Param.TYPE: s3_type,
+            S3Param.ENGINE_TYPE: s3_type,
             S3Param.VERSION: ""
         }
         if s3_type in [S3Engine.AWS, S3Engine.MINIO]:
@@ -139,12 +141,12 @@ def _assert_engine(engine: S3Engine | str,
 
     for key, value in _S3_ACCESS_DATA.items():
         if not engine or engine == key:
-            result = (key, value[S3Param.TYPE])
+            result = (key, value[S3Param.ENGINE_TYPE])
             break
     if not result:
         for key, value in _S3_ACCESS_DATA.items():
-            if engine == value[S3Param.TYPE]:
-                result = (key, value[S3Param.TYPE])
+            if engine == value[S3Param.ENGINE_TYPE]:
+                result = (key, value[S3Param.ENGINE_TYPE])
                 break
 
     if not result:

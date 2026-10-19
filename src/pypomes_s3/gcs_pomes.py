@@ -7,12 +7,13 @@ from google.cloud.storage.blob import Blob
 from google.cloud.storage.bucket import Bucket
 from google.oauth2.service_account import Credentials
 from io import BytesIO
+from logging import Logger
 from pathlib import Path
 from pypomes_core import Mimetype, file_get_data
 from typing import Any, BinaryIO
 
 from .s3_common import (
-    _S3_ACCESS_DATA, _S3_LOGGERS, S3Param,
+    _S3_ACCESS_DATA, _S3_LOGGERS, S3Engine, S3Param,
     _get_param, _except_msg
 )
 
@@ -22,7 +23,7 @@ def gcs_setup(*,
               bucket_name: str = None,
               project_id: str = None,
               credentials: dict[str, str] | BytesIO | Path | str | bytes = None,
-              errors: list[str] = None) -> None:
+              logger: Logger = None) -> bool:
     """
     Establish the parameters for access to *engine* of type *GCS*.
 
@@ -56,8 +57,15 @@ def gcs_setup(*,
     :param bucket_name: the name of the default bucket
     :param project_id: optional project identification
     :param credentials: optional access credentials
-    :param errors: incidental error messages (might be a non-empty list)
+    :param logger: the logger for the GCS engine
+    :return: *True* if the parameters were accepted, *False* otherwise
     """
+    # initialize the return variable
+    result: bool = False
+
+    if engine_id == S3Engine.GCS:
+        engine_id = engine_id.value
+
     gcs_data: dict[str, Any] = _S3_ACCESS_DATA.get(engine_id)
     if gcs_data:
         bucket_name = bucket_name or gcs_data.get(S3Param.BUCKET_NAME)
@@ -72,53 +80,17 @@ def gcs_setup(*,
                 credentials = json.loads(s=credentials_bytes)
             project_id = credentials.get("project_id")
         _S3_ACCESS_DATA[engine_id] = {
+            S3Param.ENGINE_ID: engine_id,
+            S3Param.ENGINE_TYPE: S3Engine.GCS,
             S3Param.BUCKET_NAME: bucket_name,
+            S3Param.CREDENTIALS: credentials,
             S3Param.PROJECT_ID: project_id,
-            S3Param.CREDENTIALS: credentials
+            S3Param.VERSION: ""
         }
-    else:
-        err_msg = "'bucket_name' and either 'credentials' or 'project_id' must be provided"
-        if _S3_LOGGERS.get(engine_id):
-            _S3_LOGGERS[engine_id].error(msg=err_msg)
-        if isinstance(errors, list):
-            errors.append(err_msg)
-
-
-def get_client(engine_id: str,
-               errors: list[str] = None) -> Client | None:
-    """
-    Obtain and return a *GCS* client object.
-
-    :param engine_id: the reference GCS engine
-    :param errors: incidental error messages (might be a non-empty list)
-    :return: the *GCS* client object, or *None* if error
-    """
-    # initialize the return variable
-    result: Client | None = None
-
-    # obtain the GCS client
-    project_id: str = _get_param(engine_id=engine_id,
-                                 param=S3Param.PROJECT_ID)
-    credentials: dict[str, str] = _get_param(engine_id=engine_id,
-                                             param=S3Param.CREDENTIALS)
-    try:
-        if credentials:
-            # use specific service account data
-            gcs_credentials: Any = Credentials.from_service_account_info(info=credentials)
-            result = Client(project=project_id,
-                            credentials=gcs_credentials)
-        else:
-            result = Client(project=project_id)
-        if _S3_LOGGERS.get(engine_id):
-            _S3_LOGGERS[engine_id].debug(msg="*GCS* client created")
-
-    except Exception as e:
-        msg: str = _except_msg(exception=e,
-                               engine_id=engine_id)
-        if _S3_LOGGERS.get(engine_id):
-            _S3_LOGGERS[engine_id].error(msg=msg)
-        if isinstance(errors, list):
-            errors.append(msg)
+        _S3_LOGGERS[engine_id] = logger
+        result = True
+    elif logger:
+        logger.error(msg="'bucket_name' and either 'credentials' or 'project_id' must be provided")
 
     return result
 
@@ -166,6 +138,45 @@ def startup(engine_id: str,
                     _S3_LOGGERS[engine_id].error(msg=msg)
                 if isinstance(errors, list):
                     errors.append(msg)
+    return result
+
+
+def get_client(engine_id: str,
+               errors: list[str] = None) -> Client | None:
+    """
+    Obtain and return a *GCS* client object.
+
+    :param engine_id: the reference GCS engine
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: the *GCS* client object, or *None* if error
+    """
+    # initialize the return variable
+    result: Client | None = None
+
+    # obtain the GCS client
+    project_id: str = _get_param(engine_id=engine_id,
+                                 param=S3Param.PROJECT_ID)
+    credentials: dict[str, str] = _get_param(engine_id=engine_id,
+                                             param=S3Param.CREDENTIALS)
+    try:
+        if credentials:
+            # use specific service account data
+            gcs_credentials: Any = Credentials.from_service_account_info(info=credentials)
+            result = Client(project=project_id,
+                            credentials=gcs_credentials)
+        else:
+            result = Client(project=project_id)
+        if _S3_LOGGERS.get(engine_id):
+            _S3_LOGGERS[engine_id].debug(msg="*GCS* client created")
+
+    except Exception as e:
+        msg: str = _except_msg(exception=e,
+                               engine_id=engine_id)
+        if _S3_LOGGERS.get(engine_id):
+            _S3_LOGGERS[engine_id].error(msg=msg)
+        if isinstance(errors, list):
+            errors.append(msg)
+
     return result
 
 
@@ -624,6 +635,44 @@ def item_remove(engine_id: str,
     return result
 
 
+def items_count(engine_id: str,
+                prefix: str | Path | None,
+                bucket: str = None,
+                client: Client = None,
+                errors: list[str] = None) -> int | None:
+    """
+    Retrieve the number of items prefixed with *prefix*, in the *GCS* store.
+
+    If *prefix* is not specified, then the bucket's root is used. A count operation on the contents
+    of a *prefix* may be time-consuming, as the least inefficient way to obtain such information with the
+    *boto3* package is by paginating the elements and accounting for the sizes of these pages.
+
+    :param engine_id: the reference GCS engine
+    :param prefix: path prefixing the items to be counted
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param client: optional *GCS* client (obtains a new one, if not provided)
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: the number of items in *prefix*, 0 if *prefix* not found, or *None* if error
+    """
+    # initialize the return variable
+    result: int | None = None
+
+    # retrieve the names of the items to be counted
+    curr_errors: list[str] = []
+    item_names: list[dict[str, str]] = items_get_info(engine_id=engine_id,
+                                                      attrs=["name"],
+                                                      prefix=prefix,
+                                                      bucket=bucket,
+                                                      client=client,
+                                                      errors=curr_errors)
+    if curr_errors:
+        errors.extend(curr_errors)
+    else:
+        result = len(item_names)
+
+    return result
+
+
 def items_get_info(engine_id: str,
                    attrs: list[str],
                    prefix: str | Path,
@@ -749,6 +798,86 @@ def items_get_info(engine_id: str,
     return result
 
 
+def items_get_names(engine_id: str,
+                    prefix: str | Path,
+                    max_count: int = None,
+                    start_after: str = None,
+                    bucket: str = None,
+                    client: Client = None,
+                    errors: list[str] = None) -> list[dict[str, Any]] | None:
+    """
+    Recursively retrieve and return names prefixed with *prefix*, in the *GCS* store.
+
+    If *prefix* is not specified, then the bucket's root is used. If *max_count* is a positive integer,
+    the number of items returned may be less, but not more, than its value, otherwise it is ignored, and
+    all existing items in *prefix* are returned. Optionally, *start_after* identifies the item after which
+    the listing must start, thus allowing for paginating the items retrieval operation.
+
+    :param engine_id: the reference GCS engine
+    :param prefix: path prefixing the items to be listed
+    :param max_count: the maximum number of items to return (defaults to all items)
+    :param start_after: optionally identifies the item after which to start the listing (defaults to first item)
+    :param bucket: the bucket to use (uses the default bucket, if not provided)
+    :param client: optional *GCS* client (obtains a new one, if not provided)
+    :param errors: incidental error messages (might be a non-empty list)
+    :return: information on a list of items in *prefix*, or *None* if error or *prefix* not found
+    """
+    # initialize the return variable
+    result: list[str] | None = None
+
+    # make sure to have a client
+    client = client or get_client(engine_id=engine_id,
+                                  errors=errors)
+    if client:
+        # make sure to have a bucket
+        bucket = bucket or _get_param(engine_id=engine_id,
+                                      param=S3Param.BUCKET_NAME)
+        # must terminate with '/', otherwise only the folder is considered
+        path: str = Path(prefix).as_posix() + "/" if prefix else None
+        if not isinstance(max_count, int) or \
+           isinstance(max_count, bool) or max_count < 0:
+            max_count = 0
+        max_keys: int = max_count if 0 < max_count < 1000 else 1000
+
+        # retrieve the info
+        try:
+            items: list[str] = []
+            proceed: bool = True
+            while proceed:
+                # retrieve up to 1000 objects at a time
+                reply: HTTPIterator = client.list_blobs(bucket_or_name=bucket,
+                                                        max_results=max_keys,
+                                                        page_token=start_after,
+                                                        prefix=path,
+                                                        delimiter="/",
+                                                        fields="items(name), nextPageToken")
+                proceed = False
+                page = next(reply.pages)
+                for gcs_blob in page:
+                    items.append(gcs_blob.name)
+
+                start_after = reply.next_page_token
+                if start_after > 0:
+                    max_keys = max_count - len(result) if 0 < max_count - len(result) < 1000 else 1000
+                    proceed = True
+
+            # save the items and log the results
+            result = items
+            if _S3_LOGGERS.get(engine_id):
+                msg: str = f"Listed {len(result)} names in '{prefix}', bucket '{bucket}'"
+                if start_after:
+                    msg += f", starting after {start_after}"
+                _S3_LOGGERS[engine_id].debug(msg=msg)
+        except Exception as e:
+            msg: str = _except_msg(exception=e,
+                                   engine_id=engine_id)
+            if _S3_LOGGERS.get(engine_id):
+                _S3_LOGGERS[engine_id].error(msg=msg)
+            if isinstance(errors, list):
+                errors.append(msg)
+    return result
+
+
 def items_get_tags(engine_id: str,
                    prefix: str | Path,
                    max_count: int = None,
@@ -829,44 +958,6 @@ def items_get_tags(engine_id: str,
                 _S3_LOGGERS[engine_id].error(msg=msg)
             if isinstance(errors, list):
                 errors.append(msg)
-    return result
-
-
-def items_count(engine_id: str,
-                prefix: str | Path | None,
-                bucket: str = None,
-                client: Client = None,
-                errors: list[str] = None) -> int | None:
-    """
-    Retrieve the number of items prefixed with *prefix*, in the *GCS* store.
-
-    If *prefix* is not specified, then the bucket's root is used. A count operation on the contents
-    of a *prefix* may be time-consuming, as the least inefficient way to obtain such information with the
-    *boto3* package is by paginating the elements and accounting for the sizes of these pages.
-
-    :param engine_id: the reference GCS engine
-    :param prefix: path prefixing the items to be counted
-    :param bucket: the bucket to use (uses the default bucket, if not provided)
-    :param client: optional *GCS* client (obtains a new one, if not provided)
-    :param errors: incidental error messages (might be a non-empty list)
-    :return: the number of items in *prefix*, 0 if *prefix* not found, or *None* if error
-    """
-    # initialize the return variable
-    result: int | None = None
-
-    # retrieve the names of the items to be counted
-    curr_errors: list[str] = []
-    item_names: list[dict[str, str]] = items_get_info(engine_id=engine_id,
-                                                      attrs=["name"],
-                                                      prefix=prefix,
-                                                      bucket=bucket,
-                                                      client=client,
-                                                      errors=curr_errors)
-    if curr_errors:
-        errors.extend(curr_errors)
-    else:
-        result = len(item_names)
-
     return result
 
 
