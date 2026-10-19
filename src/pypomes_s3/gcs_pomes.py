@@ -66,12 +66,6 @@ def gcs_setup(*,
     if engine_id == S3Engine.GCS:
         engine_id = engine_id.value
 
-    gcs_data: dict[str, Any] = _S3_ACCESS_DATA.get(engine_id)
-    if gcs_data:
-        bucket_name = bucket_name or gcs_data.get(S3Param.BUCKET_NAME)
-        project_id = project_id or gcs_data.get(S3Param.PROJECT_ID)
-        credentials = credentials or gcs_data.get(S3Param.CREDENTIALS)
-
     if bucket_name and (project_id or credentials):
         # initilize the GCS parameters
         if credentials:

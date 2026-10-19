@@ -1,6 +1,7 @@
 from .s3_common import (
     S3Engine, S3Param
 )
+from .gcs_pomes import gcs_setup
 from .s3_pomes import (
     s3_setup, s3_remove, s3_set_logger, s3_get_engines,
     s3_get_param, s3_get_params, s3_get_type,
@@ -15,6 +16,8 @@ from .s3_pomes import (
 )
 
 __all__ = [
+    # gcs_pomes
+    "gcs_setup",
     # s3_common
     "S3Engine", "S3Param",
     # s3_pomes

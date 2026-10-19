@@ -48,8 +48,8 @@ def __get_access_data() -> dict[str, dict[S3Param, Any]]:
     """
     Establish the access data for select S3 engines, from environment variables.
 
-    Sepcifying S3 storage parameters dynamically with 'gcs_setup()' is the required way for GCS engines if
-    authentication is done through credential key/value pairs, whereas specifying S3 storage parameters
+    Sepcifying S3 storage parameters dynamically with 'gcs_setup()' is the required way for GCS engines,
+    if authentication is done through credential key/value pairs, whereas specifying S3 storage parameters
     dynamically with 's3_setup()' is the preferred way for AWS and MinIO engines. Specifying S3 storage
     parameters with environment variables can be done in two ways:
       - 1. for a single S3 engine, specify the set
@@ -141,11 +141,11 @@ def _assert_engine(engine: S3Engine | str,
 
     for key, value in _S3_ACCESS_DATA.items():
         if not engine or engine == key:
-            result = (key, value[S3Param.ENGINE_TYPE])
+            result = (key, value.get(S3Param.ENGINE_TYPE))
             break
     if not result:
         for key, value in _S3_ACCESS_DATA.items():
-            if engine == value[S3Param.ENGINE_TYPE]:
+            if engine == value.get(S3Param.ENGINE_TYPE):
                 result = (key, value[S3Param.ENGINE_TYPE])
                 break
 
